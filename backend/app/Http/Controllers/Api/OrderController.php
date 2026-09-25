@@ -18,6 +18,7 @@ class OrderController extends Controller
             name: $request->validated('customer_name'),
             items: $request->validated('items'),
             amountPaid: $request->validated('amount_paid'),
+            phone: $request->validated('customer_phone'),
         );
 
         return OrderResource::make($order)->response()->setStatusCode(201);

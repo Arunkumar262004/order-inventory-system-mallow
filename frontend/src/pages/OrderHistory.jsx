@@ -61,7 +61,8 @@ export default function OrderHistory() {
       {result && (
         <>
           <p className="text-sm text-slate-600">
-            <span className="font-medium text-slate-900">{result.customer.name}</span> ({result.customer.email}) ·{' '}
+            <span className="font-medium text-slate-900">{result.customer.name}</span> ({result.customer.email}
+            {result.customer.phone && `, ${result.customer.phone}`}) ·{' '}
             {result.meta.total} order{result.meta.total === 1 ? '' : 's'}
           </p>
 
@@ -98,7 +99,10 @@ export default function OrderHistory() {
                   <div className="mt-2 flex justify-end gap-4 border-t border-dashed border-slate-200 pt-2 text-xs text-slate-500">
                     <span>Subtotal {formatINR(order.subtotal)}</span>
                     <span>Tax {formatINR(order.tax_total)}</span>
-                    <span>{order.confirmation_sent_at ? '✉ Confirmation sent' : '⏳ Email queued'}</span>
+                    <span>{order.confirmation_sent_at ? '✉ Email sent' : '⏳ Email queued'}</span>
+                    {result.customer.phone && (
+                      <span>{order.whatsapp_sent_at ? '✓ WhatsApp sent' : '⏳ WhatsApp pending'}</span>
+                    )}
                   </div>
                 </div>
               </details>

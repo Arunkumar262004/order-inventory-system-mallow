@@ -11,5 +11,5 @@ Route::get('/products/low-stock', [ProductController::class, 'lowStock']);
 Route::post('/orders', [OrderController::class, 'store']);
 Route::get('/orders/{order}', [OrderController::class, 'show']);
 
-Route::get('/customers/{email}', [CustomerController::class, 'show']);
+Route::get('/customers/lookup', [CustomerController::class, 'lookup']);
 Route::get('/customers/{email}/orders', [CustomerController::class, 'orders']);

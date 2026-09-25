@@ -1,12 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createOrder, findCustomer, getProducts } from '../api'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createOrder, getProducts } from '../api'
 import { parseApiError } from '../api/client'
 import Bill from '../components/Bill'
 import LowStockAlert from '../components/LowStockAlert'
 import { Alert, Card, Field, Spinner, inputClass } from '../components/ui'
+import useCustomerLookup from '../hooks/useCustomerLookup'
 import { changeBreakdown, formatINR, taxOn, toCents } from '../lib/money'
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 let nextKey = 1
 const newLine = () => ({ key: nextKey++, productId: '', quantity: 1 })
@@ -15,10 +14,7 @@ export default function NewOrder() {
   const [products, setProducts] = useState([])
   const [loadError, setLoadError] = useState(null)
 
-  const [email, setEmail] = useState('')
-  const [name, setName] = useState('')
-  const [customerStatus, setCustomerStatus] = useState('idle') // idle | checking | found | new
-  const lookupSeq = useRef(0)
+  const customer = useCustomerLookup()
 
   const [lines, setLines] = useState([newLine()])
   const [amountGiven, setAmountGiven] = useState('')
@@ -61,29 +57,6 @@ export default function NewOrder() {
 
   const fieldError = (key) => error?.errors?.[key]?.[0]
 
-  async function lookupCustomer() {
-    const value = email.trim().toLowerCase()
-    if (!EMAIL_RE.test(value)) {
-      setCustomerStatus('idle')
-      return
-    }
-    const seq = ++lookupSeq.current
-    setCustomerStatus('checking')
-    try {
-      const customer = await findCustomer(value)
-      if (seq !== lookupSeq.current) return
-      setName(customer.name)
-      setCustomerStatus('found')
-    } catch (e) {
-      if (seq !== lookupSeq.current) return
-      if (parseApiError(e).status === 404) {
-        setCustomerStatus('new')
-      } else {
-        setCustomerStatus('idle')
-      }
-    }
-  }
-
   function updateLine(key, patch) {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)))
   }
@@ -93,9 +66,7 @@ export default function NewOrder() {
   }
 
   function resetForm() {
-    setEmail('')
-    setName('')
-    setCustomerStatus('idle')
+    customer.reset()
     setLines([newLine()])
     setAmountGiven('')
     setError(null)
@@ -118,8 +89,9 @@ export default function NewOrder() {
     setSubmitting(true)
     try {
       const created = await createOrder({
-        customer_email: email.trim(),
-        customer_name: name.trim() || null,
+        customer_email: customer.email.trim(),
+        customer_name: customer.name.trim() || null,
+        customer_phone: customer.phone.trim() || null,
         items: lines.map((l) => ({ product_id: Number(l.productId), quantity: Number(l.quantity) })),
         amount_paid: amountGiven === '' ? null : Number(amountGiven),
       })
@@ -146,50 +118,42 @@ export default function NewOrder() {
         {loadError && <Alert>{loadError}</Alert>}
         {error && <Alert>{error.message}</Alert>}
 
-        <Card title="Customer">
-          <div className="grid gap-4 sm:grid-cols-2">
+        <Card title="Customer" actions={<CustomerStatus status={customer.status} />}>
+          <div className="grid gap-4 sm:grid-cols-3">
             <Field
-              label="Email"
-              error={fieldError('customer_email')}
-              hint={
-                customerStatus === 'found'
-                  ? 'Returning customer: name filled in automatically.'
-                  : customerStatus === 'new'
-                    ? 'New customer: please enter their name.'
-                    : null
-              }
+              label="Mobile no."
+              error={fieldError('customer_phone') || customer.lookupError}
+              hint="For the WhatsApp bill"
             >
+              <input
+                type="tel"
+                inputMode="tel"
+                className={inputClass}
+                placeholder="e.g. 98765 43210"
+                value={customer.phone}
+                onChange={(e) => customer.change('phone', e.target.value)}
+                onBlur={() => customer.lookup('phone')}
+              />
+            </Field>
+            <Field label="Email" error={fieldError('customer_email')}>
               <input
                 type="email"
                 className={inputClass}
                 placeholder="e.g. thomas@example.com"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value)
-                  if (customerStatus === 'found') {
-                    setCustomerStatus('idle')
-                    setName('')
-                  }
-                }}
-                onBlur={lookupCustomer}
+                value={customer.email}
+                onChange={(e) => customer.change('email', e.target.value)}
+                onBlur={() => customer.lookup('email')}
                 required
               />
             </Field>
             <Field label="Name" error={fieldError('customer_name')}>
-              <div className="relative">
-                <input
-                  className={inputClass}
-                  placeholder="auto-filled if email exists"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  readOnly={customerStatus === 'found'}
-                />
-                {customerStatus === 'checking' && (
-                  <span className="absolute right-3 top-2.5 text-slate-400">
-                    <Spinner />
-                  </span>
-                )}
-              </div>
+              <input
+                className={inputClass}
+                placeholder="auto-filled if customer exists"
+                value={customer.name}
+                onChange={(e) => customer.change('name', e.target.value)}
+                readOnly={customer.status === 'found'}
+              />
             </Field>
           </div>
         </Card>
@@ -333,6 +297,21 @@ export default function NewOrder() {
         <LowStockAlert refreshKey={lowStockKey} />
       </div>
     </form>
+  )
+}
+
+function CustomerStatus({ status }) {
+  const states = {
+    checking: { text: 'Looking up…', className: 'text-slate-500', spinner: true },
+    found: { text: '✓ Returning customer: details filled in', className: 'text-green-700' },
+    new: { text: 'New customer: enter name and email', className: 'text-blue-700' },
+  }
+  const state = states[status]
+  if (!state) return <span className="text-xs text-slate-400">Enter mobile or email to find a customer</span>
+  return (
+    <span className={`flex items-center gap-1.5 text-xs font-medium ${state.className}`}>
+      {state.spinner && <Spinner />} {state.text}
+    </span>
   )
 }
 

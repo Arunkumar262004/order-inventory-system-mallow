@@ -61,16 +61,34 @@ Run each of these in its own terminal:
 # 1. API: http://localhost:8000
 cd backend && php artisan serve
 
-# 2. Queue worker (sends the order-confirmation email)
+# 2. Queue worker (sends the confirmation email + WhatsApp message)
 cd backend && php artisan queue:work
 
 # 3. Frontend: http://localhost:5173
 cd frontend && npm run dev
 ```
 
-Open **http://localhost:5173**. The confirmation "emails" are written to `backend/storage/logs/laravel.log` (`MAIL_MAILER=log`).
+Open **http://localhost:5173**. With the default `MAIL_MAILER=log`, the confirmation emails are written to `backend/storage/logs/laravel.log`.
 
-Seeded customers you can try: `thomas@example.com` and `priya@example.com`. Their names fill in automatically.
+Seeded customers you can try: `thomas@example.com` (mobile `5550001111`) and `priya@example.com` (mobile `5550002222`). Type either the mobile number or the email, and the other two fields fill in. The seeded numbers are deliberately not real, so test WhatsApp delivery with your own number.
+
+### Optional: real email and WhatsApp
+
+Both notifications work without any keys: the email goes to the log, and WhatsApp is skipped with a log warning. To send them for real, set these in `backend/.env`:
+
+```env
+# Email via Resend (composer package resend/resend-php is already installed)
+MAIL_MAILER=resend
+RESEND_API_KEY=re_xxxxxxxx
+MAIL_FROM_ADDRESS="onboarding@resend.dev"   # Resend's test sender: delivers only to your own Resend account email
+
+# WhatsApp via wasender.dev (https://wasender.dev)
+WASENDER_API_TOKEN=wsk_xxxxxxxx
+WASENDER_API_URL=https://api.wasender.dev/messages/text
+DEFAULT_COUNTRY_CODE=91                       # prefixed to 10-digit local numbers
+```
+
+Then restart `php artisan queue:work` (a running worker keeps the old config).
 
 ## 4. Tests
 
@@ -79,7 +97,7 @@ cd backend
 php artisan test
 ```
 
-There are 27 tests (115 assertions). They cover order creation, totals and rounding, insufficient stock, all-or-nothing rollback, validation, customer reuse, payment and change, order history, low-stock thresholds, the queued job, CORS, and a real multi-process concurrency test.
+There are 46 tests (172 assertions). They cover order creation, totals and rounding, insufficient stock, all-or-nothing rollback, validation, customer reuse, mobile-number lookup and normalisation, payment and change, order history, low-stock thresholds, both queued jobs (the WhatsApp API is faked with `Http::fake`), CORS, and a real multi-process concurrency test. `phpunit.xml` blanks the WhatsApp token and Resend key, so tests never send real messages.
 
 > The tests use the MySQL database `store-order-inventory-system_testing` (set in `phpunit.xml`). The concurrency test needs MySQL, because SQLite silently ignores `SELECT … FOR UPDATE`. On any other driver the test skips itself.
 
@@ -94,7 +112,7 @@ Base URL: `http://localhost:8000/api`. Every response is JSON. A validation or s
 | `POST` | `/orders` | Create an order |
 | `GET` | `/orders/{id}` | Show one order |
 | `GET` | `/customers/{email}/orders?page=&per_page=` | A customer's order history, newest first (paginated) |
-| `GET` | `/customers/{email}` | Look up a customer (auto-fills the name on the billing screen) |
+| `GET` | `/customers/lookup?email=` or `?phone=` | Find a customer by email **or** mobile number (drives the billing screen's auto-fill) |
 | `GET` | `/products` | Catalog, for the product dropdown |
 | `GET` | `/products/low-stock?threshold=` | Products with stock **below** the threshold |
 
@@ -108,6 +126,7 @@ Accept: application/json
 {
   "customer_email": "thomas@example.com",
   "customer_name": "Thomas Shelby",      // required only for a new customer
+  "customer_phone": "98765 43210",       // optional; enables the WhatsApp bill
   "items": [
     { "product_id": 1, "quantity": 2 },
     { "product_id": 2, "quantity": 5 }
@@ -174,10 +193,11 @@ The configuration:
 ### Schema
 
 ```
-customers (id, name, email UNIQUE)
+customers (id, name, email UNIQUE, phone NULL UNIQUE)
 products  (id, name, code UNIQUE, price, tax_percent, stock UNSIGNED, INDEX stock)
 orders    (id, order_number UNIQUE, customer_id FK, subtotal, tax_total, grand_total,
-           amount_paid NULL, change_due NULL, confirmation_sent_at NULL, INDEX(customer_id, created_at))
+           amount_paid NULL, change_due NULL, confirmation_sent_at NULL, whatsapp_sent_at NULL,
+           INDEX(customer_id, created_at))
 order_items (id, order_id FK cascade, product_id FK restrict, unit_price, tax_percent, quantity,
              line_subtotal, line_tax, line_total, UNIQUE(order_id, product_id))
 ```
@@ -219,12 +239,19 @@ I checked that the test really catches the bug: with `lockForUpdate()` removed, 
 
 *Alternative considered:* a conditional atomic update, `UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?`, checking the number of affected rows. It is lock-free and also correct. I chose pessimistic locking because a multi-line order needs to check every line before committing to any of them, and the lock makes that all-or-nothing logic easy to follow.
 
-### Queued job
+### Queued jobs (email + WhatsApp)
 
-- `SendOrderConfirmation` implements `ShouldQueue` and runs on the `database` queue.
-- It is dispatched **after the transaction commits**, so an order that was rolled back never sends an email.
-- It sends a real Mailable (`OrderConfirmationMail`, a Markdown template) through the configured mailer. By default that is `MAIL_MAILER=log`, so the full email appears in `laravel.log` with no SMTP needed. Switching to real mail only requires `.env` changes.
-- It uses `tries = 3` with backoff, and it is **idempotent**: it sets `confirmation_sent_at` and skips if that is already set, so a retry never emails twice.
+- **`SendOrderConfirmation`** (email) and **`SendOrderWhatsAppConfirmation`** both implement `ShouldQueue` and run on the `database` queue.
+- Both are dispatched **after the transaction commits**, so an order that was rolled back never notifies anyone. The WhatsApp job is dispatched only when the customer has a mobile number.
+- **They are two separate jobs on purpose.** If WhatsApp is down, its retries never re-send the email, and the other way round.
+- **Email:** a real Mailable (`OrderConfirmationMail`, a Markdown template) sent through the configured mailer: `log` by default, `resend` once `RESEND_API_KEY` is set.
+- **WhatsApp:** [`WasenderClient`](backend/app/Services/WhatsApp/WasenderClient.php) posts `{to, body}` (number without the `+`) with a Bearer token to wasender.dev's `/messages/text` endpoint; a 2xx means WhatsApp accepted it. The message is the itemised bill. A non-2xx response throws, so the queue retries. With no token set, the job logs a warning and skips.
+- Both use `tries = 3` with backoff and are **idempotent**. Each sets its own timestamp (`confirmation_sent_at` / `whatsapp_sent_at`) and skips if it is already set, so a retry never sends twice.
+
+### Mobile numbers
+
+- **Stored in E.164** ([backend/app/Support/Phone.php](backend/app/Support/Phone.php)). `98765 43210`, `09876543210`, `919876543210` and `+91-98765-43210` all become `+919876543210`. That makes lookups match however the number was typed, and it is the format WhatsApp needs. Ten-digit numbers get `DEFAULT_COUNTRY_CODE` (91) added.
+- **The phone is unique but optional.** Email stays the customer's identity, because the brief's order-history endpoint is keyed by email. The phone is a second way to find the same customer.
 
 ---
 
@@ -239,7 +266,11 @@ I checked that the test really catches the bug: with `lockForUpdate()` removed, 
 7. **The wireframe's "emails PDF to customer"** is covered by the queued confirmation email containing the itemised bill. PDF generation was left out as outside the brief's scope ("a log entry or fake mailer is fine"). The bill can be printed from the browser.
 8. **No authentication.** The brief describes an internal counter tool and doesn't mention auth. `php artisan install:api` added Sanctum, so token auth can be switched on with `auth:sanctum` on the route group.
 9. **Currency is INR (₹),** following the wireframe.
-10. **The frontend shows a live total preview** using the same integer maths as the server. The server's figures on the returned bill are the authoritative ones.
+10. **Mobile number:** optional on an order and never a replacement for email.
+    - If a new customer gives one, it is saved. If an existing customer gives a new or different one, their record is updated.
+    - A number that already belongs to *another* customer is rejected with a 422, rather than silently moving it between customers.
+    - On the billing screen, a known mobile fills in email and name, and a known email fills in mobile and name. Editing the field that matched clears the auto-filled values, so a typo can't bill the wrong person.
+11. **The frontend shows a live total preview** using the same integer maths as the server. The server's figures on the returned bill are the authoritative ones.
 
 ---
 
@@ -247,7 +278,7 @@ I checked that the test really catches the bug: with `lockForUpdate()` removed, 
 
 | Screen | What it does |
 |---|---|
-| **New Order** (`/`) | Customer email (name auto-fills for returning customers), product rows with stock-aware dropdowns, live subtotal/tax/total, amount given → change with note breakdown, Generate Bill → printable bill. Server errors appear on the matching row. Includes the Low Stock Alert panel. |
+| **New Order** (`/`) | Mobile / email / name, with two-way auto-fill for returning customers, product rows with stock-aware dropdowns, live subtotal/tax/total, amount given → change with note breakdown, Generate Bill → printable bill. Server errors appear on the matching row. Includes the Low Stock Alert panel. |
 | **Order History** (`/history`) | Search by email, expandable orders with line items, pagination, and whether the confirmation email has been sent. |
 | **Low Stock** (`/low-stock`) | Products below the threshold, which can be changed. |
 

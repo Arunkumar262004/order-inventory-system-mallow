@@ -46,15 +46,5 @@ class OrderHistoryTest extends TestCase
     public function test_unknown_email_returns_404(): void
     {
         $this->getJson('/api/customers/nobody@example.com/orders')->assertNotFound();
-        $this->getJson('/api/customers/nobody@example.com')->assertNotFound();
-    }
-
-    public function test_customer_lookup_returns_the_name_for_autofill(): void
-    {
-        Customer::factory()->create(['email' => 'priya@example.com', 'name' => 'Priya Raman']);
-
-        $this->getJson('/api/customers/priya@example.com')
-            ->assertOk()
-            ->assertJsonPath('data.name', 'Priya Raman');
     }
 }

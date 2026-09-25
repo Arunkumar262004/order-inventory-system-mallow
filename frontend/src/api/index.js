@@ -7,8 +7,8 @@ export const getLowStock = (threshold) =>
     .get('/products/low-stock', { params: threshold === '' || threshold == null ? {} : { threshold } })
     .then((r) => r.data)
 
-export const findCustomer = (email) =>
-  client.get(`/customers/${encodeURIComponent(email)}`).then((r) => r.data.data)
+/** Look up a customer by { email } or { phone }. Rejects with 404 when unknown. */
+export const findCustomer = (query) => client.get('/customers/lookup', { params: query }).then((r) => r.data.data)
 
 export const getOrderHistory = (email, page = 1) =>
   client.get(`/customers/${encodeURIComponent(email)}/orders`, { params: { page } }).then((r) => r.data)

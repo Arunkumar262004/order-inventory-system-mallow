@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\CustomerLookupRequest;
 use App\Http\Resources\CustomerResource;
 use App\Http\Resources\OrderResource;
 use App\Models\Customer;
@@ -12,11 +13,22 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 class CustomerController extends Controller
 {
     /**
-     * Look up a customer by email (used to auto-fill the name on the bill).
+     * Find a customer by email or mobile number, so the billing screen can
+     * auto-fill the remaining customer fields.
      */
-    public function show(string $email): CustomerResource
+    public function lookup(CustomerLookupRequest $request): CustomerResource
     {
-        return CustomerResource::make($this->findByEmail($email));
+        $customer = Customer::query()
+            ->when(
+                $request->filled('email'),
+                fn ($q) => $q->where('email', $request->validated('email')),
+                fn ($q) => $q->where('phone', $request->validated('phone')),
+            )
+            ->first();
+
+        abort_if($customer === null, 404, 'No customer found.');
+
+        return CustomerResource::make($customer);
     }
 
     /**
@@ -26,7 +38,9 @@ class CustomerController extends Controller
     {
         $request->validate(['per_page' => ['nullable', 'integer', 'min:1', 'max:100']]);
 
-        $customer = $this->findByEmail($email);
+        $customer = Customer::where('email', mb_strtolower(trim($email)))->first();
+
+        abort_if($customer === null, 404, 'No customer found with that email.');
 
         $orders = $customer->orders()
             ->with('items.product')
@@ -37,14 +51,5 @@ class CustomerController extends Controller
 
         return OrderResource::collection($orders)
             ->additional(['customer' => CustomerResource::make($customer)]);
-    }
-
-    private function findByEmail(string $email): Customer
-    {
-        $customer = Customer::where('email', mb_strtolower(trim($email)))->first();
-
-        abort_if($customer === null, 404, 'No customer found with that email.');
-
-        return $customer;
     }
 }

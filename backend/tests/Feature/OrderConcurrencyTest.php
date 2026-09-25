@@ -78,6 +78,7 @@ class OrderConcurrencyTest extends TestCase
             'DB_DATABASE' => config('database.connections.mysql.database'),
             'QUEUE_CONNECTION' => 'sync',
             'MAIL_MAILER' => 'array',
+            'WASENDER_API_TOKEN' => '',
         ];
 
         DB::beginTransaction();

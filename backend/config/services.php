@@ -22,6 +22,12 @@ return [
         'key' => env('RESEND_API_KEY'),
     ],
 
+    'wasender' => [
+        'token' => env('WASENDER_API_TOKEN'),
+        'url' => env('WASENDER_API_URL', 'https://api.wasender.dev/messages/text'),
+        'timeout' => (int) env('WASENDER_TIMEOUT', 15),
+    ],
+
     'ses' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),

@@ -4,10 +4,12 @@ namespace App\Services;
 
 use App\Exceptions\InsufficientStockException;
 use App\Jobs\SendOrderConfirmation;
+use App\Jobs\SendOrderWhatsAppConfirmation;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
 use App\Support\Money;
+use App\Support\Phone;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -28,12 +30,17 @@ class OrderService
      * @throws InsufficientStockException
      * @throws ValidationException
      */
-    public function placeOrder(string $email, ?string $name, array $items, string|float|null $amountPaid = null): Order
-    {
+    public function placeOrder(
+        string $email,
+        ?string $name,
+        array $items,
+        string|float|null $amountPaid = null,
+        ?string $phone = null,
+    ): Order {
         $items = array_values($items);
 
-        $order = DB::transaction(function () use ($email, $name, $items, $amountPaid) {
-            $customer = $this->resolveCustomer($email, $name);
+        $order = DB::transaction(function () use ($email, $name, $items, $amountPaid, $phone) {
+            $customer = $this->resolveCustomer($email, $name, Phone::normalize($phone));
 
             // Lock in primary-key order so two orders touching the same
             // products always acquire locks in the same sequence (no deadlocks).
@@ -80,24 +87,41 @@ class OrderService
             return $order;
         }, attempts: 3);
 
+        $order->load(['customer', 'items.product']);
+
         // Dispatched only once the transaction has committed, so a rolled-back
-        // order can never trigger a confirmation email.
+        // order can never trigger a confirmation.
         SendOrderConfirmation::dispatch($order);
 
-        return $order->load(['customer', 'items.product']);
+        if ($order->customer->phone !== null) {
+            SendOrderWhatsAppConfirmation::dispatch($order);
+        }
+
+        return $order;
     }
 
     /**
      * Existing customers are matched by email; a name is only needed (and
-     * only used) when the customer is new.
+     * only used) when the customer is new. A supplied mobile number is
+     * saved on the customer (new or existing).
      */
-    private function resolveCustomer(string $email, ?string $name): Customer
+    private function resolveCustomer(string $email, ?string $name, ?string $phone): Customer
     {
         $email = mb_strtolower(trim($email));
+
+        if ($phone !== null && Customer::where('phone', $phone)->where('email', '!=', $email)->exists()) {
+            throw ValidationException::withMessages([
+                'customer_phone' => 'This mobile number belongs to another customer.',
+            ]);
+        }
 
         $customer = Customer::query()->where('email', $email)->first();
 
         if ($customer) {
+            if ($phone !== null && $customer->phone !== $phone) {
+                $customer->update(['phone' => $phone]);
+            }
+
             return $customer;
         }
 
@@ -109,7 +133,7 @@ class OrderService
 
         // createOrFirst survives a race where two first-time orders for the
         // same email arrive together: the loser re-reads the winner's row.
-        return Customer::createOrFirst(['email' => $email], ['name' => trim($name)]);
+        return Customer::createOrFirst(['email' => $email], ['name' => trim($name), 'phone' => $phone]);
     }
 
     /**

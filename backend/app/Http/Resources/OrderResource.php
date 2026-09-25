@@ -28,6 +28,7 @@ class OrderResource extends JsonResource
             'amount_paid' => $this->amount_paid,
             'change_due' => $this->change_due,
             'confirmation_sent_at' => $this->confirmation_sent_at?->toIso8601String(),
+            'whatsapp_sent_at' => $this->whatsapp_sent_at?->toIso8601String(),
             'created_at' => $this->created_at?->toIso8601String(),
         ];
     }

@@ -15,6 +15,7 @@ export default function Bill({ order, onNewOrder }) {
         <div className="text-right text-sm">
           <p className="font-medium">{order.customer.name}</p>
           <p className="text-slate-500">{order.customer.email}</p>
+          {order.customer.phone && <p className="text-slate-500">{order.customer.phone}</p>}
         </div>
       </div>
 
@@ -60,7 +61,8 @@ export default function Bill({ order, onNewOrder }) {
       </dl>
 
       <p className="mt-4 text-xs text-slate-500">
-        A confirmation email has been queued for {order.customer.email}.
+        A confirmation email has been queued for {order.customer.email}
+        {order.customer.phone && <> and a WhatsApp message for {order.customer.phone}</>}.
       </p>
 
       <div className="no-print mt-6 flex flex-wrap gap-2">
