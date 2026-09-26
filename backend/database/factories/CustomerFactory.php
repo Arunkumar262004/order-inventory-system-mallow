@@ -10,6 +10,16 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  */
 class CustomerFactory extends Factory
 {
+    private const FIRST_NAMES = [
+        'Arun', 'Bala', 'Dinesh', 'Ganesh', 'Karthik', 'Murugan', 'Prakash', 'Saravanan', 'Senthil', 'Vignesh',
+        'Anitha', 'Deepa', 'Divya', 'Kavitha', 'Lakshmi', 'Meena', 'Nandhini', 'Revathi', 'Selvi', 'Tamilselvi',
+    ];
+
+    private const LAST_NAMES = [
+        'Annamalai', 'Chidambaram', 'Elango', 'Govindan', 'Kannan', 'Muthusamy', 'Natarajan', 'Palanisamy',
+        'Ramasamy', 'Subramanian', 'Thangaraj', 'Velusamy',
+    ];
+
     /**
      * Define the model's default state.
      *
@@ -17,9 +27,12 @@ class CustomerFactory extends Factory
      */
     public function definition(): array
     {
+        $first = fake()->randomElement(self::FIRST_NAMES);
+        $last = fake()->randomElement(self::LAST_NAMES);
+
         return [
-            'name' => fake()->name(),
-            'email' => fake()->unique()->safeEmail(),
+            'name' => "{$first} {$last}",
+            'email' => strtolower("{$first}.{$last}").fake()->unique()->numberBetween(1, 9999).'@example.com',
             'phone' => fake()->unique()->numerify('55########'),
         ];
     }

@@ -24,9 +24,9 @@ class RoleSeeder extends Seeder
         $cashier->syncPermissions(['dashboard.view', 'billing.create', 'orders.view']);
 
         foreach ([
-            ['Admin User', 'admin@store.test', $admin],
-            ['Maya Manager', 'manager@store.test', $manager],
-            ['Charlie Cashier', 'cashier@store.test', $cashier],
+            ['Senthil Kumar', 'admin@store.com', $admin],
+            ['Meenakshi Sundaram', 'manager@store.com', $manager],
+            ['Karthik Raja', 'cashier@store.com', $cashier],
         ] as [$name, $email, $role]) {
             User::updateOrCreate(
                 ['email' => $email],

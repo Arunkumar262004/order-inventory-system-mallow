@@ -166,7 +166,7 @@ export default function NewOrder() {
               <input
                 type="email"
                 className={inputClass}
-                placeholder="e.g. thomas@example.com"
+                placeholder="e.g. arun@example.com"
                 value={customer.email}
                 onChange={(e) => customer.change('email', e.target.value)}
                 onBlur={() => customer.lookup('email')}

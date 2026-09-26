@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { ArrowLeft, ChevronRight, Menu, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Menu, X } from 'lucide-react'
 import logo from '../assets/billing.png'
 import { useAuth } from '../auth/AuthContext'
 import NotificationBell from './NotificationBell'
@@ -50,37 +50,25 @@ export default function AppLayout() {
       >
         <div className={`flex h-16 items-center gap-3 border-b border-slate-200 px-4 ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
           {collapsed && (
-            <>
-              <button
-                onClick={() => setCollapsed(false)}
-                className="hidden h-11 w-11 place-items-center rounded-xl transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 lg:grid"
-                aria-label="Expand menu"
-                title="Expand menu"
-              >
-                <img src={logo} alt="" className="h-8 w-8 object-contain" />
-              </button>
-              <button
-                onClick={() => setCollapsed(false)}
-                className="absolute -right-3.5 top-[18px] z-10 hidden h-7 w-7 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-md transition hover:border-indigo-300 hover:bg-indigo-600 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 lg:grid"
-                aria-label="Expand menu"
-                title="Expand menu"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </>
+            <button
+              onClick={() => setCollapsed(false)}
+              className="hidden h-11 w-11 place-items-center rounded-xl transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 lg:grid"
+              aria-label="Expand menu"
+              title="Expand menu"
+            >
+              <img src={logo} alt="" className="h-8 w-8 object-contain" />
+            </button>
           )}
           <img src={logo} alt="" className={`h-9 w-9 shrink-0 object-contain ${collapsed ? 'lg:hidden' : ''}`} />
           <span className={`truncate text-base font-semibold text-slate-900 ${collapsed ? 'lg:hidden' : ''}`}>Store Billing</span>
-          {!collapsed && (
-            <button
-              onClick={() => setCollapsed(true)}
-              className="ml-auto hidden rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 lg:block"
-              aria-label="Collapse menu"
-              title="Collapse menu"
-            >
-              <ArrowLeft size={20} />
-            </button>
-          )}
+          <button
+            onClick={() => setCollapsed((c) => !c)}
+            className="absolute -right-3.5 top-[18px] z-10 hidden h-7 w-7 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-md transition hover:border-indigo-300 hover:bg-indigo-600 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 lg:grid"
+            aria-label={collapsed ? 'Expand menu' : 'Collapse menu'}
+            title={collapsed ? 'Expand menu' : 'Collapse menu'}
+          >
+            {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          </button>
           <button
             onClick={() => setMobileOpenAt(null)}
             className="ml-auto rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 lg:hidden"

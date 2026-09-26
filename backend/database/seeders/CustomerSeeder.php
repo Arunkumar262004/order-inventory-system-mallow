@@ -11,8 +11,8 @@ class CustomerSeeder extends Seeder
     {
         // 55xxx numbers are not allocated to Indian mobiles, so seeded data can
         // never WhatsApp a real person. Use your own number to test delivery.
-        Customer::updateOrCreate(['email' => 'thomas@example.com'], ['name' => 'Thomas Shelby', 'phone' => '5550001111']);
-        Customer::updateOrCreate(['email' => 'priya@example.com'], ['name' => 'Priya Raman', 'phone' => '5550002222']);
+        Customer::updateOrCreate(['email' => 'arun@example.com'], ['name' => 'Arun Kumar', 'phone' => '9578777764']);
+        Customer::updateOrCreate(['email' => 'priya@example.com'], ['name' => 'Priya Ramasamy', 'phone' => '9092276443']);
 
         Customer::factory()->count(8)->create();
     }

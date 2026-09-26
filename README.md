@@ -85,7 +85,7 @@ Open **http://localhost:5173**. With the default `MAIL_MAILER=log`, the confirma
 | `manager@store.test` | Store Manager | Dashboard, billing, orders, inventory (add/edit products, restock) |
 | `cashier@store.test` | Cashier | Dashboard, billing and order history only |
 
-Seeded customers you can try: `thomas@example.com` (mobile `5550001111`) and `priya@example.com` (mobile `5550002222`). Type either the mobile number or the email, and the other two fields fill in. The seeded numbers are deliberately not real, so test WhatsApp delivery with your own number.
+Seeded customers you can try: `arun@example.com` (mobile `5550001111`) and `priya@example.com` (mobile `5550002222`). Type either the mobile number or the email, and the other two fields fill in. The seeded numbers are deliberately not real, so test WhatsApp delivery with your own number.
 
 ### Optional: real email and WhatsApp
 
@@ -153,8 +153,8 @@ Content-Type: application/json
 Accept: application/json
 
 {
-  "customer_email": "thomas@example.com",
-  "customer_name": "Thomas Shelby",      // required only for a new customer
+  "customer_email": "arun@example.com",
+  "customer_name": "Arun Pandian",      // required only for a new customer
   "customer_phone": "98765 43210",       // optional; enables the WhatsApp bill
   "items": [
     { "product_id": 1, "quantity": 2 },
@@ -171,7 +171,7 @@ Accept: application/json
   "data": {
     "id": 1,
     "order_number": "ORD-20260925-IXBC2Z",
-    "customer": { "id": 1, "name": "Thomas Shelby", "email": "thomas@example.com" },
+    "customer": { "id": 1, "name": "Arun Pandian", "email": "arun@example.com" },
     "items": [
       { "product_id": 1, "product_name": "Colgate Toothpaste 100g", "quantity": 2,
         "unit_price": "50.00", "tax_percent": "18.00",
@@ -291,7 +291,7 @@ I checked that the test really catches the bug: with `lockForUpdate()` removed, 
 
 ## 8. Assumptions
 
-1. **Customer identity is the email** (lower-cased and trimmed, so `Thomas@Example.com` is the same customer). For an existing customer the submitted name is ignored. The saved name wins, and the UI makes the name field read-only once the email is recognised. A name is required only for a new customer.
+1. **Customer identity is the email** (lower-cased and trimmed, so `Arun@Example.com` is the same customer). For an existing customer the submitted name is ignored. The saved name wins, and the UI makes the name field read-only once the email is recognised. A name is required only for a new customer.
 2. **Tax is calculated per line and rounded half-up to the paisa**, then summed. For example, 3 × ₹9.99 at 5% gives tax ₹1.4985, which rounds to ₹1.50.
 3. **An order is all-or-nothing.** If any line is short on stock, the whole order is rejected and nothing is deducted. A partial bill at a counter would confuse the customer.
 4. **Each product may appear only once per order.** A duplicate `product_id` is a validation error; the client should raise the quantity instead. Quantity must be between 1 and 10,000, with at most 50 lines.

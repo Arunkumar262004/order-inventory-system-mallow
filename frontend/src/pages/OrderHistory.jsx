@@ -49,7 +49,7 @@ export default function OrderHistory() {
           <input
             type="email"
             className={inputClass}
-            placeholder="Customer email, e.g. thomas@example.com"
+            placeholder="Customer email, e.g. arun@example.com"
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
