@@ -87,10 +87,13 @@ Seeded customers you can try: `arun@example.com` (mobile `9578777764`) and `priy
 Both notifications work without any keys: the email goes to the log, and WhatsApp is skipped with a log warning. To send them for real, set these in `backend/.env`:
 
 ```env
-# Email via Resend (composer package resend/resend-php is already installed)
-MAIL_MAILER=resend
-RESEND_API_KEY=re_xxxxxxxx
-MAIL_FROM_ADDRESS="onboarding@resend.dev"   # Resend's test sender: delivers only to your own Resend account email
+# Email via Brevo SMTP (free: 300 emails/day, https://app.brevo.com → SMTP & API)
+MAIL_MAILER=smtp
+MAIL_HOST=smtp-relay.brevo.com
+MAIL_PORT=2525                               # 587 also works locally; Render's free plan blocks 587
+MAIL_USERNAME=xxxxxxx@smtp-brevo.com         # "Login" on Brevo's SMTP page
+MAIL_PASSWORD=xsmtpsib-xxxxxxxx              # an SMTP key
+MAIL_FROM_ADDRESS="you@yourdomain.com"       # must be a verified sender in Brevo
 
 # WhatsApp via wasender.dev (https://wasender.dev)
 WASENDER_API_TOKEN=wsk_xxxxxxxx
@@ -107,7 +110,7 @@ cd backend
 php artisan test
 ```
 
-There are 74 tests. They cover login, logout, rate limiting and password changes; role-based access (a cashier gets 403 on inventory and settings, and even a role holding every permission can't reach settings); role and user management, admin password resets and self-lock-out protection; product create/edit, restocks and corrections (stock can never go negative), with every change in the stock log; the dashboard, notifications and private reminders; order creation, totals and rounding, insufficient stock, all-or-nothing rollback, validation, customer reuse, mobile-number lookup and normalisation, payment and change, order history, low-stock thresholds, both queued jobs (the WhatsApp API is faked with `Http::fake`), CORS, and a real multi-process concurrency test. `phpunit.xml` blanks the WhatsApp token and Resend key, so tests never send real messages.
+There are 74 tests. They cover login, logout, rate limiting and password changes; role-based access (a cashier gets 403 on inventory and settings, and even a role holding every permission can't reach settings); role and user management, admin password resets and self-lock-out protection; product create/edit, restocks and corrections (stock can never go negative), with every change in the stock log; the dashboard, notifications and private reminders; order creation, totals and rounding, insufficient stock, all-or-nothing rollback, validation, customer reuse, mobile-number lookup and normalisation, payment and change, order history, low-stock thresholds, both queued jobs (the WhatsApp API is faked with `Http::fake`), CORS, and a real multi-process concurrency test. `phpunit.xml` uses the `array` mailer and blanks the WhatsApp token, so tests never send real messages.
 
 > The tests run on an in-memory SQLite database (set in `phpunit.xml`), so they need nothing installed and never touch the Neon data. The concurrency test needs real row locks, which SQLite ignores, so it skips itself there. To run it, point `phpunit.xml` at a separate PostgreSQL test database (never the live one: tests wipe their tables).
 
@@ -273,7 +276,7 @@ I checked that the test really catches the bug: with `lockForUpdate()` removed, 
 - **`SendOrderConfirmation`** (email) and **`SendOrderWhatsAppConfirmation`** both implement `ShouldQueue` and run on the `database` queue.
 - Both are dispatched **after the transaction commits**, so an order that was rolled back never notifies anyone. The WhatsApp job is dispatched only when the customer has a mobile number.
 - **They are two separate jobs on purpose.** If WhatsApp is down, its retries never re-send the email, and the other way round.
-- **Email:** a real Mailable (`OrderConfirmationMail`, a Markdown template) sent through the configured mailer: `log` by default, `resend` once `RESEND_API_KEY` is set.
+- **Email:** a real Mailable (`OrderConfirmationMail`, a Markdown template) sent through the configured mailer: `log` by default, Brevo SMTP once the `MAIL_*` settings are filled in.
 - **WhatsApp:** [`WasenderClient`](backend/app/Services/WhatsApp/WasenderClient.php) posts `{to, body}` (number without the `+`) with a Bearer token to wasender.dev's `/messages/text` endpoint; a 2xx means WhatsApp accepted it. The message is the itemised bill. A non-2xx response throws, so the queue retries. With no token set, the job logs a warning and skips.
 - Both use `tries = 3` with backoff and are **idempotent**. Each sets its own timestamp (`confirmation_sent_at` / `whatsapp_sent_at`) and skips if it is already set, so a retry never sends twice.
 
@@ -296,7 +299,7 @@ I checked that the test really catches the bug: with `lockForUpdate()` removed, 
 8. **Every endpoint except `/login` requires sign-in,** including the brief's three order endpoints. A billing counter handles money and customer data, so anonymous access isn't reasonable.
     - **Access is permission-based:** roles are bundles of permissions from [backend/config/permissions.php](backend/config/permissions.php), each registered as a Gate ability and enforced by `can:` route middleware. The frontend hides menus the user can't use, but the server is the real gate.
     - **Settings is Admin-only by design:** it isn't an assignable permission, so no custom role can ever manage users or roles. The Admin role can't be edited or deleted, and admins can't deactivate or demote themselves.
-    - **Password reset is admin-driven:** an admin sets a new password for the user from Settings, which signs them out everywhere, and users change their own from their profile. There is no self-service "forgot password" email, because the store has an admin on hand and email delivery (Resend) is optional in this setup.
+    - **Password reset is admin-driven:** an admin sets a new password for the user from Settings, which signs them out everywhere, and users change their own from their profile. There is no self-service "forgot password" email, because the store has an admin on hand and email delivery (Brevo) is optional in this setup.
     - **Deactivated users** are signed out immediately and can't sign in.
 9. **Currency is INR (₹),** following the wireframe.
 10. **Mobile number:** optional on an order and never a replacement for email.

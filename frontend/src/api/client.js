@@ -69,7 +69,10 @@ export function parseApiError(error) {
     }
   }
   if (error?.request) {
-    return { message: 'Cannot reach the API. Is `php artisan serve` running on port 8000?', errors: {}, status: 0 }
+    const message = import.meta.env.DEV
+      ? 'Cannot reach the API. Is `php artisan serve` running on port 8000?'
+      : 'Cannot reach the server. Please check your connection and try again.'
+    return { message, errors: {}, status: 0 }
   }
   return { message: error?.message ?? 'Unexpected error.', errors: {}, status: 0 }
 }
