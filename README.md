@@ -55,20 +55,35 @@ cp .env.example .env          # VITE_API_URL=http://localhost:8000/api
 
 ## 3. Running
 
-Run each of these in its own terminal:
+**One command, one terminal.** Run this from the repo root (the first time, run `npm install` there too):
 
 ```bash
-# 1. API: http://localhost:8000
-cd backend && php artisan serve
-
-# 2. Queue worker (sends the confirmation email + WhatsApp message)
-cd backend && php artisan queue:work
-
-# 3. Frontend: http://localhost:5173
-cd frontend && npm run dev
+npm run dev
 ```
 
+It uses [concurrently](https://github.com/open-cli-tools/concurrently) to start all three processes with coloured, labelled output. Ctrl+C stops them all.
+
+| Label | Process | URL / role |
+|---|---|---|
+| `api` | `php artisan serve` | http://localhost:8000 |
+| `queue` | `php artisan queue:listen --tries=3` | sends the confirmation email + WhatsApp a few seconds after each bill |
+| `web` | `npm --prefix frontend run dev` | http://localhost:5173 |
+
+The worker is `queue:listen` rather than `queue:work` because it reloads the app for every job. Changes to code or `.env` apply without restarting anything, which is the right trade-off for development. In production use `queue:work` under a process manager (Supervisor, systemd, or NSSM on Windows) so it restarts on crash and at boot.
+
+You can still run the three separately if you prefer: `npm run dev:api`, `npm run dev:queue` and `npm run dev:web`.
+
+> Why not run the jobs inline (`QUEUE_CONNECTION=sync`)? Then no worker is needed, but every bill would wait for the email and WhatsApp APIs, and the brief asks for a *queued* job. The worker keeps billing instant, and failed sends are retried (3 attempts with backoff) and kept in `failed_jobs`.
+
 Open **http://localhost:5173**. With the default `MAIL_MAILER=log`, the confirmation emails are written to `backend/storage/logs/laravel.log`.
+
+**Sign in** with one of the seeded demo accounts. The password for all three is `password123`, and the login page has one-click buttons for them.
+
+| Account | Role | Sees |
+|---|---|---|
+| `admin@store.test` | Admin | Everything, plus **Settings** (Users, Roles & Permissions, Password Reset) |
+| `manager@store.test` | Store Manager | Dashboard, billing, orders, inventory (add/edit products, restock) |
+| `cashier@store.test` | Cashier | Dashboard, billing and order history only |
 
 Seeded customers you can try: `thomas@example.com` (mobile `5550001111`) and `priya@example.com` (mobile `5550002222`). Type either the mobile number or the email, and the other two fields fill in. The seeded numbers are deliberately not real, so test WhatsApp delivery with your own number.
 
@@ -97,7 +112,7 @@ cd backend
 php artisan test
 ```
 
-There are 46 tests (172 assertions). They cover order creation, totals and rounding, insufficient stock, all-or-nothing rollback, validation, customer reuse, mobile-number lookup and normalisation, payment and change, order history, low-stock thresholds, both queued jobs (the WhatsApp API is faked with `Http::fake`), CORS, and a real multi-process concurrency test. `phpunit.xml` blanks the WhatsApp token and Resend key, so tests never send real messages.
+There are 71 tests (305 assertions). They cover login, logout, rate limiting and password changes; role-based access (a cashier gets 403 on inventory and settings, and even a role holding every permission can't reach settings); role and user management, admin password resets and self-lock-out protection; product create/edit, restocks and corrections (stock can never go negative), with every change in the stock log; the dashboard, notifications and private reminders; order creation, totals and rounding, insufficient stock, all-or-nothing rollback, validation, customer reuse, mobile-number lookup and normalisation, payment and change, order history, low-stock thresholds, both queued jobs (the WhatsApp API is faked with `Http::fake`), CORS, and a real multi-process concurrency test. `phpunit.xml` blanks the WhatsApp token and Resend key, so tests never send real messages.
 
 > The tests use the MySQL database `store-order-inventory-system_testing` (set in `phpunit.xml`). The concurrency test needs MySQL, because SQLite silently ignores `SELECT … FOR UPDATE`. On any other driver the test skips itself.
 
@@ -107,14 +122,28 @@ There are 46 tests (172 assertions). They cover order creation, totals and round
 
 Base URL: `http://localhost:8000/api`. Every response is JSON. A validation or stock failure returns `422` with Laravel's standard `{ message, errors }` shape.
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `POST` | `/orders` | Create an order |
-| `GET` | `/orders/{id}` | Show one order |
-| `GET` | `/customers/{email}/orders?page=&per_page=` | A customer's order history, newest first (paginated) |
-| `GET` | `/customers/lookup?email=` or `?phone=` | Find a customer by email **or** mobile number (drives the billing screen's auto-fill) |
-| `GET` | `/products` | Catalog, for the product dropdown |
-| `GET` | `/products/low-stock?threshold=` | Products with stock **below** the threshold |
+**Authentication:** call `POST /login` with `{email, password}` to get a Sanctum token, then send `Authorization: Bearer <token>` on every other request. With no token or an expired one you get `401`; without the needed permission you get `403`. Tokens expire after 12 hours (`SANCTUM_EXPIRATION`, in minutes).
+
+| Method | Endpoint | Permission | Purpose |
+|---|---|---|---|
+| `POST` | `/login` | none (5 attempts/min) | Get a token + the user's permissions |
+| `GET` / `POST` | `/me` · `/logout` | signed in | Current user & permissions · revoke this token |
+| `PUT` | `/me/password` | signed in | Change own password (other sessions are signed out) |
+| `GET` | `/dashboard` | `dashboard.view` | Sales stats, 7-day chart data, recent bills, stock summary, my reminders |
+| `GET` | `/notifications` | signed in | Due/overdue reminders + low/out-of-stock alerts (stock alerts only with `products.view`) |
+| `GET/POST/PUT/DELETE` | `/reminders` | signed in | Own reminders only |
+| `POST` | `/orders` | `billing.create` | Create an order |
+| `GET` | `/customers/lookup?email=` or `?phone=` | `billing.create` | Find a customer by email **or** mobile number (billing auto-fill) |
+| `GET` | `/orders/{id}` | `orders.view` | Show one order |
+| `GET` | `/customers/{email}/orders?page=&per_page=` | `orders.view` | A customer's order history, newest first (paginated) |
+| `GET` | `/products` | `products.view` or `billing.create` | Catalog (also feeds the bill's product dropdown) |
+| `GET` | `/products/low-stock?threshold=` | `products.view` | Products with stock **below** the threshold |
+| `POST` / `PUT` | `/products` · `/products/{id}` | `products.manage` | Add a product (with opening stock) · edit details |
+| `POST` | `/products/{id}/stock` | `stock.adjust` | `{type: restock\|correction, quantity (signed), note}` |
+| `GET` | `/products/{id}/movements` | `products.view` | Stock log for a product |
+| `GET` | `/permissions` | Admin | Permission catalogue, grouped |
+| `GET/POST/PUT/DELETE` | `/roles`, `/users` | Admin | Manage roles and users |
+| `PUT` | `/users/{id}/password` | Admin | Reset a user's password (signs them out everywhere) |
 
 ### Create order
 
@@ -182,7 +211,8 @@ The React app (`localhost:5173`) and the API (`localhost:8000`) are on different
 The configuration:
 
 - `allowed_origins` comes from `FRONTEND_URL` in `backend/.env`. It accepts a comma-separated list, e.g. for a deployed frontend. Only that origin is allowed; there is no `*`.
-- `supports_credentials` is `false`. The API is stateless, with no cookies or sessions.
+- `supports_credentials` is `false`. The API is stateless, with no cookies or sessions: the login token travels in the `Authorization` header, which is in `allowed_headers`.
+- The token is kept in `localStorage`, so a page refresh keeps you signed in. An axios interceptor attaches it to every request. On any `401` (token expired or revoked, e.g. after an admin password reset) the app signs out and shows the login page. Trade-off: `localStorage` can be read by injected scripts (XSS). HttpOnly cookies via Sanctum's SPA mode would avoid that, but they need same-site hosting and CSRF handling, which is more than a two-origin dev setup needs.
 - On the frontend, [frontend/src/api/client.js](frontend/src/api/client.js) is a single axios instance with `baseURL = VITE_API_URL`. It sends `Accept: application/json`, so Laravel always returns validation errors as JSON 422 instead of redirecting.
 - Vite runs with `strictPort: true`, so the dev server can't silently move to another port that CORS would then block.
 
@@ -193,10 +223,14 @@ The configuration:
 ### Schema
 
 ```
+roles (id, name UNIQUE, description, is_admin)          role_permissions (role_id FK, permission) PK(both)
+users (…, role_id FK, is_active, last_login_at)
+stock_movements (id, product_id FK, user_id FK NULL, order_id FK NULL, type, quantity ±, stock_after, note)
+reminders (id, user_id FK, title, notes, due_at, completed_at NULL)
 customers (id, name, email UNIQUE, phone NULL UNIQUE)
 products  (id, name, code UNIQUE, price, tax_percent, stock UNSIGNED, INDEX stock)
 orders    (id, order_number UNIQUE, customer_id FK, subtotal, tax_total, grand_total,
-           amount_paid NULL, change_due NULL, confirmation_sent_at NULL, whatsapp_sent_at NULL,
+           created_by FK users NULL, amount_paid NULL, change_due NULL, confirmation_sent_at NULL, whatsapp_sent_at NULL,
            INDEX(customer_id, created_at))
 order_items (id, order_id FK cascade, product_id FK restrict, unit_price, tax_percent, quantity,
              line_subtotal, line_tax, line_total, UNIQUE(order_id, product_id))
@@ -264,13 +298,21 @@ I checked that the test really catches the bug: with `lockForUpdate()` removed, 
 5. **"Below the threshold" is strict** (`stock < threshold`). The default is `LOW_STOCK_THRESHOLD=10` in `.env` (read through `config/inventory.php`), and it can be overridden per request with `?threshold=`.
 6. **"Amount given by customer" and "Balance to return"** from the wireframe are optional. If `amount_paid` is sent, the server checks it covers the grand total (otherwise 422) and stores the change. The note/coin breakdown (e.g. `1×₹20 + 1×₹2 + 80 paise`) is display-only and calculated in the browser.
 7. **The wireframe's "emails PDF to customer"** is covered by the queued confirmation email containing the itemised bill. PDF generation was left out as outside the brief's scope ("a log entry or fake mailer is fine"). The bill can be printed from the browser.
-8. **No authentication.** The brief describes an internal counter tool and doesn't mention auth. `php artisan install:api` added Sanctum, so token auth can be switched on with `auth:sanctum` on the route group.
+8. **Every endpoint except `/login` requires sign-in,** including the brief's three order endpoints. A billing counter handles money and customer data, so anonymous access isn't reasonable.
+    - **Access is permission-based:** roles are bundles of permissions from [backend/config/permissions.php](backend/config/permissions.php), each registered as a Gate ability and enforced by `can:` route middleware. The frontend hides menus the user can't use, but the server is the real gate.
+    - **Settings is Admin-only by design:** it isn't an assignable permission, so no custom role can ever manage users or roles. The Admin role can't be edited or deleted, and admins can't deactivate or demote themselves.
+    - **Password reset is admin-driven:** an admin sets a new password for the user from Settings, which signs them out everywhere, and users change their own from their profile. There is no self-service "forgot password" email, because the store has an admin on hand and email delivery (Resend) is optional in this setup.
+    - **Deactivated users** are signed out immediately and can't sign in.
 9. **Currency is INR (₹),** following the wireframe.
 10. **Mobile number:** optional on an order and never a replacement for email.
     - If a new customer gives one, it is saved. If an existing customer gives a new or different one, their record is updated.
     - A number that already belongs to *another* customer is rejected with a 422, rather than silently moving it between customers.
     - On the billing screen, a known mobile fills in email and name, and a known email fills in mobile and name. Editing the field that matched clears the auto-filled values, so a typo can't bill the wrong person.
 11. **The frontend shows a live total preview** using the same integer maths as the server. The server's figures on the returned bill are the authoritative ones.
+12. **Stock changes only through audited paths.** Editing a product can't change its stock. Stock moves only through a sale, a restock (always +), a correction (+ or −, reason required) or the opening stock on create. Each change writes a `stock_movements` row with who made it, the signed quantity and the resulting level. Restocks use the same row lock as sales, so they can't race each other.
+13. **Notifications are derived, not stored.** The bell shows current conditions: due or overdue reminders, and low or out-of-stock products. So an alert disappears by itself once the product is restocked or the reminder is completed. "Seen" state is kept per browser, only to clear the red badge.
+14. **Reminders are personal** (each user sees only their own). "Due" means due by the end of today; overdue ones are highlighted.
+15. **Times use `APP_TIMEZONE=Asia/Kolkata`,** so "today's sales" and the 7-day chart follow the store's calendar day.
 
 ---
 
@@ -278,11 +320,23 @@ I checked that the test really catches the bug: with `lockForUpdate()` removed, 
 
 | Screen | What it does |
 |---|---|
-| **New Order** (`/`) | Mobile / email / name, with two-way auto-fill for returning customers, product rows with stock-aware dropdowns, live subtotal/tax/total, amount given → change with note breakdown, Generate Bill → printable bill. Server errors appear on the matching row. Includes the Low Stock Alert panel. |
-| **Order History** (`/history`) | Search by email, expandable orders with line items, pagination, and whether the confirmation email has been sent. |
-| **Low Stock** (`/low-stock`) | Products below the threshold, which can be changed. |
+Layout: a dark sidebar that collapses to icons on desktop (the choice is remembered) and slides in as a drawer on mobile. The top bar has the page title, the notification bell and the user menu (change password, sign out). Only the menu items your role allows are shown.
 
-After each order attempt, successful or not, the product list and low-stock panel reload, so stock counts reflect sales made by anyone else too.
+| Screen | What it does |
+|---|---|
+| **Login** (`/login`) | Email + password, show/hide password, demo-account shortcuts |
+| **Dashboard** (`/dashboard`) | Today's and this month's sales, product and restock counts, 7-day sales chart with hover details, recent bills, stock alerts with one-click restock, my reminders (tick to complete) |
+| **New Bill** (`/billing`) | Mobile / email / name, with two-way auto-fill for returning customers, product rows with stock-aware dropdowns, live subtotal/tax/total, amount given → change with note breakdown, Generate Bill → printable bill. Server errors appear on the matching row. The Low Stock panel shows only for roles with inventory access. |
+| **Receipt** (after Generate bill) | Thermal till receipt preview (store header, GSTIN, bill no, cashier, items, CGST/SGST summary, cash/change, QR of the bill number) with an **80 mm / 58 mm** switch (remembered) and **Print receipt**. Printing uses [react-to-print](https://github.com/MatthewHerbst/react-to-print) with `@page { size: 80mm auto; margin: 0 }`, so a thermal printer or "Save as PDF" gets a till slip, not an A4 sheet. Store details come from `VITE_STORE_*` in `frontend/.env`. |
+| **Order History** (`/orders`) | Search by email, expandable orders with line items, pagination, email/WhatsApp status, and a **Receipt** button to preview and reprint any past bill |
+| **Inventory** (`/inventory`) | All / Low-stock tabs (threshold can be changed), search, **Add product**, **Edit**, **Stock** (restock or correction with a live before → after preview), and a per-product **stock history** |
+| **Reminders** (`/reminders`) | Pending / completed, add, edit, complete, delete |
+| **Settings → Users** | Add users with a role, edit, deactivate, delete (admin only) |
+| **Settings → Roles & Permissions** | Create or edit roles by ticking grouped permissions; Admin is locked |
+| **Settings → Password Reset** | Set or generate a new password for any user |
+| **My profile** (`/profile`) | Account details, permissions, change own password |
+
+After each bill, stock change or reminder update, the affected lists and the notification bell refresh straight away. The bell also re-checks every 60 seconds.
 
 ---
 

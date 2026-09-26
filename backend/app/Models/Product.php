@@ -38,6 +38,14 @@ class Product extends Model
     }
 
     /**
+     * @return HasMany<StockMovement, $this>
+     */
+    public function stockMovements(): HasMany
+    {
+        return $this->hasMany(StockMovement::class);
+    }
+
+    /**
      * Products whose stock is strictly below the given threshold.
      *
      * @param  Builder<Product>  $query

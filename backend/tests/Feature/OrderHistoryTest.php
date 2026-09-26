@@ -13,6 +13,13 @@ class OrderHistoryTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->signIn();
+    }
+
     public function test_it_returns_a_customers_orders_newest_first(): void
     {
         Queue::fake();

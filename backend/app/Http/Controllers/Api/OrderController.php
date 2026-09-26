@@ -19,6 +19,7 @@ class OrderController extends Controller
             items: $request->validated('items'),
             amountPaid: $request->validated('amount_paid'),
             phone: $request->validated('customer_phone'),
+            cashier: $request->user(),
         );
 
         return OrderResource::make($order)->response()->setStatusCode(201);
@@ -26,6 +27,6 @@ class OrderController extends Controller
 
     public function show(Order $order): OrderResource
     {
-        return OrderResource::make($order->load(['customer', 'items.product']));
+        return OrderResource::make($order->load(['customer', 'cashier', 'items.product']));
     }
 }

@@ -18,6 +18,8 @@ class CustomerPhoneTest extends TestCase
     {
         parent::setUp();
 
+        $this->signIn();
+
         Queue::fake();
     }
 

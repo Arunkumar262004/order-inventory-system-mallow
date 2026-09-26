@@ -17,7 +17,7 @@ return [
 
     'paths' => ['api/*'],
 
-    'allowed_methods' => ['GET', 'POST', 'OPTIONS'],
+    'allowed_methods' => ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 
     'allowed_origins' => array_filter(array_map(
         'trim',
@@ -26,7 +26,7 @@ return [
 
     'allowed_origins_patterns' => [],
 
-    'allowed_headers' => ['Content-Type', 'Accept', 'X-Requested-With'],
+    'allowed_headers' => ['Content-Type', 'Accept', 'Authorization', 'X-Requested-With'],
 
     'exposed_headers' => [],
 

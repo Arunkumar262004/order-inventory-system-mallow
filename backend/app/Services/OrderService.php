@@ -8,6 +8,8 @@ use App\Jobs\SendOrderWhatsAppConfirmation;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\StockMovement;
+use App\Models\User;
 use App\Support\Money;
 use App\Support\Phone;
 use Illuminate\Support\Collection;
@@ -36,10 +38,11 @@ class OrderService
         array $items,
         string|float|null $amountPaid = null,
         ?string $phone = null,
+        ?User $cashier = null,
     ): Order {
         $items = array_values($items);
 
-        $order = DB::transaction(function () use ($email, $name, $items, $amountPaid, $phone) {
+        $order = DB::transaction(function () use ($email, $name, $items, $amountPaid, $phone, $cashier) {
             $customer = $this->resolveCustomer($email, $name, Phone::normalize($phone));
 
             // Lock in primary-key order so two orders touching the same
@@ -68,6 +71,7 @@ class OrderService
                 'grand_total' => Money::format($grandTotal),
                 'amount_paid' => $paid,
                 'change_due' => $change,
+                'created_by' => $cashier?->id,
             ]);
 
             $order->items()->createMany(array_map(fn (array $line) => [
@@ -82,12 +86,21 @@ class OrderService
 
             foreach ($lines as $line) {
                 $line['product']->decrement('stock', $line['quantity']);
+
+                $line['product']->stockMovements()->create([
+                    'user_id' => $cashier?->id,
+                    'order_id' => $order->id,
+                    'type' => StockMovement::TYPE_SALE,
+                    'quantity' => -$line['quantity'],
+                    'stock_after' => $line['product']->stock,
+                    'note' => $order->order_number,
+                ]);
             }
 
             return $order;
         }, attempts: 3);
 
-        $order->load(['customer', 'items.product']);
+        $order->load(['customer', 'cashier', 'items.product']);
 
         // Dispatched only once the transaction has committed, so a rolled-back
         // order can never trigger a confirmation.

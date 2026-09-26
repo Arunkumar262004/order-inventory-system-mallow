@@ -18,6 +18,8 @@ class OrderCreationTest extends TestCase
     {
         parent::setUp();
 
+        $this->signIn();
+
         Queue::fake();
     }
 

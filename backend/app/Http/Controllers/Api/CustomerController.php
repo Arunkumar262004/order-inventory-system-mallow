@@ -43,7 +43,7 @@ class CustomerController extends Controller
         abort_if($customer === null, 404, 'No customer found with that email.');
 
         $orders = $customer->orders()
-            ->with('items.product')
+            ->with(['items.product', 'cashier'])
             ->latest()
             ->latest('id')
             ->paginate($request->integer('per_page', 10))

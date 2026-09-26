@@ -1,93 +1,105 @@
 import { Link } from 'react-router-dom'
-import { changeBreakdown, formatINR, toCents } from '../lib/money'
+import { CircleCheck, History, Mail, MessageCircle, Plus, Printer } from 'lucide-react'
+import { useAuth } from '../auth/AuthContext'
+import { formatINR } from '../lib/money'
+import ThermalReceipt from './receipt/ThermalReceipt'
+import usePrintReceipt from './receipt/usePrintReceipt'
+import { Button, Card } from './ui'
 
-export default function Bill({ order, onNewOrder }) {
-  const change = order.change_due !== null ? changeBreakdown(toCents(order.change_due)) : null
-
+export function PaperToggle({ paper, setPaper }) {
   return (
-    <div className="mx-auto max-w-2xl rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-2 border-b border-dashed border-slate-300 pb-4">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-green-700">Order confirmed</p>
-          <h2 className="text-xl font-semibold">{order.order_number}</h2>
-          <p className="text-sm text-slate-500">{new Date(order.created_at).toLocaleString('en-IN')}</p>
-        </div>
-        <div className="text-right text-sm">
-          <p className="font-medium">{order.customer.name}</p>
-          <p className="text-slate-500">{order.customer.email}</p>
-          {order.customer.phone && <p className="text-slate-500">{order.customer.phone}</p>}
-        </div>
-      </div>
-
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-xs uppercase text-slate-500">
-            <th className="py-1">Product</th>
-            <th className="py-1 text-right">Qty</th>
-            <th className="py-1 text-right">Price</th>
-            <th className="py-1 text-right">Tax</th>
-            <th className="py-1 text-right">Line total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {order.items.map((item) => (
-            <tr key={item.product_id} className="border-t border-slate-100">
-              <td className="py-1.5">{item.product_name}</td>
-              <td className="py-1.5 text-right">{item.quantity}</td>
-              <td className="py-1.5 text-right">{formatINR(item.unit_price)}</td>
-              <td className="py-1.5 text-right text-slate-500">{Number(item.tax_percent)}%</td>
-              <td className="py-1.5 text-right">{formatINR(item.line_total)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <dl className="mt-4 space-y-1 border-t border-dashed border-slate-300 pt-4 text-sm">
-        <Row label="Subtotal" value={formatINR(order.subtotal)} />
-        <Row label="Tax" value={formatINR(order.tax_total)} />
-        <Row label="Grand total" value={formatINR(order.grand_total)} strong />
-        {order.amount_paid !== null && (
-          <>
-            <Row label="Amount given" value={formatINR(order.amount_paid)} />
-            <Row label="Balance returned" value={formatINR(order.change_due)} strong />
-            {change && change.parts.length + change.paise > 0 && (
-              <p className="text-right text-xs text-slate-500">
-                {change.parts.map((p) => `${p.count}×₹${p.value}`).join(' + ')}
-                {change.paise > 0 && `${change.parts.length ? ' + ' : ''}${change.paise} paise`}
-              </p>
-            )}
-          </>
-        )}
-      </dl>
-
-      <p className="mt-4 text-xs text-slate-500">
-        A confirmation email has been queued for {order.customer.email}
-        {order.customer.phone && <> and a WhatsApp message for {order.customer.phone}</>}.
-      </p>
-
-      <div className="no-print mt-6 flex flex-wrap gap-2">
-        <button onClick={onNewOrder} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
-          New order
-        </button>
-        <button onClick={() => window.print()} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50">
-          Print bill
-        </button>
-        <Link
-          to={`/history?email=${encodeURIComponent(order.customer.email)}`}
-          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+    <div className="inline-flex rounded-lg bg-slate-100 p-1 text-sm" role="radiogroup" aria-label="Receipt paper width">
+      {['80', '58'].map((size) => (
+        <button
+          key={size}
+          type="button"
+          role="radio"
+          aria-checked={paper === size}
+          onClick={() => setPaper(size)}
+          className={`rounded-md px-3 py-1.5 font-medium transition ${paper === size ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
         >
-          Customer history
-        </Link>
-      </div>
+          {size} mm
+        </button>
+      ))}
     </div>
   )
 }
 
-function Row({ label, value, strong }) {
+export default function Bill({ order, onNewOrder }) {
+  const { can } = useAuth()
+  const { contentRef, paper, setPaper, print } = usePrintReceipt(order.order_number)
+
   return (
-    <div className={`flex justify-between ${strong ? 'font-semibold text-slate-900' : 'text-slate-600'}`}>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+      {/* Receipt preview on a "counter" backdrop, exactly as it will print. */}
+      <div className="flex justify-center overflow-x-auto rounded-2xl bg-gradient-to-b from-slate-200 to-slate-300/70 px-4 py-8 shadow-inner">
+        <div className="shadow-[0_18px_40px_-12px_rgba(15,23,42,0.45),0_4px_10px_-4px_rgba(15,23,42,0.2)]">
+          <ThermalReceipt ref={contentRef} order={order} paper={paper} />
+        </div>
+      </div>
+
+      <div className="space-y-6 lg:sticky lg:top-24">
+        <Card>
+          <div className="flex items-start gap-3">
+            <div className="rounded-full bg-emerald-50 p-2 text-emerald-600">
+              <CircleCheck size={22} aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-emerald-700">Bill generated</p>
+              <p className="truncate text-lg font-semibold text-slate-900">{order.order_number}</p>
+              <p className="text-sm text-slate-500">{order.customer.name}</p>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-baseline justify-between rounded-xl bg-slate-900 px-4 py-3 text-white">
+            <span className="text-sm text-slate-300">Grand total</span>
+            <span className="text-2xl font-semibold tabular-nums">{formatINR(order.grand_total)}</span>
+          </div>
+          {order.amount_paid !== null && (
+            <div className="mt-2 flex justify-between rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+              <span>Change returned</span>
+              <span className="tabular-nums">{formatINR(order.change_due)}</span>
+            </div>
+          )}
+
+          <div className="mt-5">
+            <p className="mb-2 text-xs font-medium text-slate-600">Receipt paper</p>
+            <PaperToggle paper={paper} setPaper={setPaper} />
+          </div>
+
+          <Button icon={Printer} size="lg" className="mt-4 w-full" onClick={print}>
+            Print receipt
+          </Button>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <Button variant="secondary" icon={Plus} onClick={onNewOrder}>
+              New bill
+            </Button>
+            {can('orders.view') ? (
+              <Link
+                to={`/orders?email=${encodeURIComponent(order.customer.email)}`}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+              >
+                <History size={16} aria-hidden /> History
+              </Link>
+            ) : (
+              <span />
+            )}
+          </div>
+        </Card>
+
+        <Card title="Confirmations">
+          <ul className="space-y-2 text-sm">
+            <li className="flex items-center gap-2 text-slate-700">
+              <Mail size={16} className="text-slate-400" aria-hidden /> Email queued for {order.customer.email}
+            </li>
+            {order.customer.phone && (
+              <li className="flex items-center gap-2 text-slate-700">
+                <MessageCircle size={16} className="text-slate-400" aria-hidden /> WhatsApp queued for {order.customer.phone}
+              </li>
+            )}
+          </ul>
+        </Card>
+      </div>
     </div>
   )
 }

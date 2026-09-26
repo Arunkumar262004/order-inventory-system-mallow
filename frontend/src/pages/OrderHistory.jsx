@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getOrderHistory } from '../api'
 import { parseApiError } from '../api/client'
-import { Alert, Card, Spinner, inputClass } from '../components/ui'
+import { Printer } from 'lucide-react'
+import ReceiptModal from '../components/receipt/ReceiptModal'
+import { Alert, Button, Card, Spinner, inputClass } from '../components/ui'
 import { formatINR } from '../lib/money'
 
 export default function OrderHistory() {
@@ -14,6 +16,7 @@ export default function OrderHistory() {
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [receiptFor, setReceiptFor] = useState(null)
 
   useEffect(() => {
     if (!email) return
@@ -50,7 +53,7 @@ export default function OrderHistory() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
-          <button className="flex items-center justify-center gap-2 rounded-md bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700">
+          <button className="flex items-center justify-center gap-2 rounded-md bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700">
             {loading && <Spinner />} Search
           </button>
         </form>
@@ -96,13 +99,21 @@ export default function OrderHistory() {
                       ))}
                     </tbody>
                   </table>
-                  <div className="mt-2 flex justify-end gap-4 border-t border-dashed border-slate-200 pt-2 text-xs text-slate-500">
+                  <div className="mt-2 flex flex-wrap items-center justify-end gap-4 border-t border-dashed border-slate-200 pt-2 text-xs text-slate-500">
                     <span>Subtotal {formatINR(order.subtotal)}</span>
                     <span>Tax {formatINR(order.tax_total)}</span>
                     <span>{order.confirmation_sent_at ? '✉ Email sent' : '⏳ Email queued'}</span>
                     {result.customer.phone && (
                       <span>{order.whatsapp_sent_at ? '✓ WhatsApp sent' : '⏳ WhatsApp pending'}</span>
                     )}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={Printer}
+                      onClick={() => setReceiptFor({ ...order, customer: result.customer })}
+                    >
+                      Receipt
+                    </Button>
                   </div>
                 </div>
               </details>
@@ -132,6 +143,8 @@ export default function OrderHistory() {
           )}
         </>
       )}
+
+      {receiptFor && <ReceiptModal order={receiptFor} onClose={() => setReceiptFor(null)} />}
     </div>
   )
 }

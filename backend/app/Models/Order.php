@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'order_number', 'customer_id', 'subtotal', 'tax_total', 'grand_total',
-    'amount_paid', 'change_due', 'confirmation_sent_at', 'whatsapp_sent_at',
+    'amount_paid', 'change_due', 'confirmation_sent_at', 'whatsapp_sent_at', 'created_by',
 ])]
 class Order extends Model
 {
@@ -42,6 +42,14 @@ class Order extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function cashier(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     /**

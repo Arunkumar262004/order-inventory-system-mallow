@@ -21,6 +21,7 @@ class OrderResource extends JsonResource
             'id' => $this->id,
             'order_number' => $this->order_number,
             'customer' => CustomerResource::make($this->whenLoaded('customer')),
+            'cashier' => $this->whenLoaded('cashier', fn () => $this->cashier?->name),
             'items' => OrderItemResource::collection($this->whenLoaded('items')),
             'subtotal' => $this->subtotal,
             'tax_total' => $this->tax_total,

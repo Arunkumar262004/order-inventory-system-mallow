@@ -3,7 +3,9 @@ import { createOrder, getProducts } from '../api'
 import { parseApiError } from '../api/client'
 import Bill from '../components/Bill'
 import LowStockAlert from '../components/LowStockAlert'
-import { Alert, Card, Field, Spinner, inputClass } from '../components/ui'
+import { Plus, ReceiptText, Trash2 } from 'lucide-react'
+import { Alert, Badge, Button, Card, Field, Spinner, inputClass } from '../components/ui'
+import { useAuth } from '../auth/AuthContext'
 import useCustomerLookup from '../hooks/useCustomerLookup'
 import { changeBreakdown, formatINR, taxOn, toCents } from '../lib/money'
 
@@ -11,6 +13,7 @@ let nextKey = 1
 const newLine = () => ({ key: nextKey++, productId: '', quantity: 1 })
 
 export default function NewOrder() {
+  const { can } = useAuth()
   const [products, setProducts] = useState([])
   const [loadError, setLoadError] = useState(null)
 
@@ -103,6 +106,7 @@ export default function NewOrder() {
       // Stock may have changed either way (our order, or someone else's).
       loadProducts()
       setLowStockKey((k) => k + 1)
+      window.dispatchEvent(new Event('store:refresh-notifications'))
     }
   }
 
@@ -111,10 +115,11 @@ export default function NewOrder() {
   }
 
   const selectedIds = new Set(lines.map((l) => String(l.productId)).filter(Boolean))
+  const filledLines = selectedIds.size
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[1fr_300px]" noValidate>
-      <div className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+      <div className="min-w-0 space-y-6">
         {loadError && <Alert>{loadError}</Alert>}
         {error && <Alert>{error.message}</Alert>}
 
@@ -158,143 +163,173 @@ export default function NewOrder() {
           </div>
         </Card>
 
-        <Card title="Products">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-sm">
-              <thead>
-                <tr className="bg-slate-100 text-left text-xs uppercase text-slate-600">
-                  <th className="rounded-l-md px-3 py-2">Product</th>
-                  <th className="w-24 px-3 py-2">Qty</th>
-                  <th className="w-24 px-3 py-2 text-right">Price</th>
-                  <th className="w-28 px-3 py-2 text-right">Line total</th>
-                  <th className="w-10 rounded-r-md px-3 py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map((line, i) => {
-                  const product = productById.get(String(line.productId))
-                  const overStock = product && Number(line.quantity) > product.stock
-                  const rowError =
-                    fieldError(`items.${i}.product_id`) ||
-                    fieldError(`items.${i}.quantity`) ||
-                    (overStock ? `Only ${product.stock} in stock.` : null)
-                  return (
-                    <tr key={line.key} className="align-top">
-                      <td className="px-3 py-2">
-                        <select
-                          className={inputClass}
-                          value={line.productId}
-                          onChange={(e) => updateLine(line.key, { productId: e.target.value })}
-                        >
-                          <option value="">Select a product…</option>
-                          {products.map((p) => (
-                            <option
-                              key={p.id}
-                              value={p.id}
-                              disabled={p.stock === 0 || (selectedIds.has(String(p.id)) && String(p.id) !== String(line.productId))}
-                            >
-                              {p.name} ({p.stock === 0 ? 'out of stock' : `${p.stock} left`})
-                            </option>
-                          ))}
-                        </select>
-                        {rowError && <p className="mt-1 text-xs text-red-600">{rowError}</p>}
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="number"
-                          min="1"
-                          max={product?.stock}
-                          className={`${inputClass} ${overStock ? 'border-red-400' : ''}`}
-                          value={line.quantity}
-                          onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
-                        />
-                      </td>
-                      <td className="px-3 py-2 pt-4 text-right text-slate-600">
-                        {product ? formatINR(product.price) : '—'}
-                        {product && Number(product.tax_percent) > 0 && (
-                          <span className="block text-xs text-slate-400">+{Number(product.tax_percent)}% tax</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 pt-4 text-right font-medium">
-                        {product ? formatINR(preview.rows[i].total, { cents: true }) : '—'}
-                      </td>
-                      <td className="px-3 py-2 pt-3">
-                        <button
-                          type="button"
-                          onClick={() => removeLine(line.key)}
-                          className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                          aria-label="Remove row"
-                        >
-                          ✕
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-          {fieldError('items') && <p className="mt-2 text-xs text-red-600">{fieldError('items')}</p>}
-          <div className="mt-3 flex justify-end">
-            <button
-              type="button"
+        <Card
+          padded={false}
+          className="@container"
+          title={
+            <span className="flex items-center gap-2">
+              Products
+              {filledLines > 0 && <Badge tone="indigo">{filledLines} item{filledLines === 1 ? '' : 's'}</Badge>}
+            </span>
+          }
+          actions={
+            <Button
+              size="sm"
+              icon={Plus}
               onClick={() => setLines((prev) => [...prev, newLine()])}
               disabled={lines.length >= products.length}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              + Add Product
-            </button>
+              Add product
+            </Button>
+          }
+        >
+          {/* Wide card: one line per product. Narrow card (phone, or zoomed-in laptop): product + delete on top, qty / price / total below. */}
+          <div className="hidden grid-cols-[1.5rem_minmax(0,1fr)_5.5rem_6rem_6.5rem_2.25rem] gap-3 border-y border-slate-100 bg-slate-50 px-5 py-2.5 text-xs font-medium uppercase tracking-wide text-slate-500 @2xl:grid">
+            <span>#</span>
+            <span>Product</span>
+            <span>Qty</span>
+            <span className="text-right">Price</span>
+            <span className="text-right">Line total</span>
+            <span />
           </div>
-        </Card>
+          <ul className="divide-y divide-slate-100 border-t border-slate-100 @2xl:border-t-0">
+            {lines.map((line, i) => {
+              const product = productById.get(String(line.productId))
+              const overStock = product && Number(line.quantity) > product.stock
+              const rowError =
+                fieldError(`items.${i}.product_id`) ||
+                fieldError(`items.${i}.quantity`) ||
+                (overStock ? `Only ${product.stock} in stock.` : null)
+              return (
+                <li
+                  key={line.key}
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-5 py-4 @2xl:grid-cols-[1.5rem_minmax(0,1fr)_5.5rem_6rem_6.5rem_2.25rem]"
+                >
+                  <span className="hidden pt-2.5 text-xs tabular-nums text-slate-400 @2xl:block">{i + 1}</span>
 
-        <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
-          <Card title="Payment">
-            <dl className="space-y-1.5 text-sm">
+                  <div className="min-w-0">
+                    <select
+                      className={inputClass}
+                      value={line.productId}
+                      onChange={(e) => updateLine(line.key, { productId: e.target.value })}
+                      aria-label={`Product for row ${i + 1}`}
+                    >
+                      <option value="">Select a product…</option>
+                      {products.map((p) => (
+                        <option
+                          key={p.id}
+                          value={p.id}
+                          disabled={p.stock === 0 || (selectedIds.has(String(p.id)) && String(p.id) !== String(line.productId))}
+                        >
+                          {p.name} ({p.stock === 0 ? 'out of stock' : `${p.stock} left`})
+                        </option>
+                      ))}
+                    </select>
+                    {rowError && <p className="mt-1 text-xs text-red-600">{rowError}</p>}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => removeLine(line.key)}
+                    className="rounded-lg p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600 @2xl:order-last"
+                    aria-label={`Delete row ${i + 1}`}
+                    title="Delete"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+
+                  <div className="col-span-2 grid grid-cols-3 items-start gap-3 @2xl:contents">
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-medium uppercase text-slate-500 @2xl:hidden">Qty</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max={product?.stock}
+                        className={`${inputClass} ${overStock ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : ''}`}
+                        value={line.quantity}
+                        onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
+                        aria-label={`Quantity for row ${i + 1}`}
+                      />
+                    </label>
+                    <div className="text-right text-sm tabular-nums text-slate-600 @2xl:pt-2">
+                      <span className="mb-1 block text-[11px] font-medium uppercase text-slate-500 @2xl:hidden">Price</span>
+                      {product ? formatINR(product.price) : '—'}
+                      {product && Number(product.tax_percent) > 0 && (
+                        <span className="block text-xs text-slate-400">+{Number(product.tax_percent)}% GST</span>
+                      )}
+                    </div>
+                    <div className="text-right text-sm font-semibold tabular-nums text-slate-900 @2xl:pt-2">
+                      <span className="mb-1 block text-[11px] font-medium uppercase text-slate-500 @2xl:hidden">Total</span>
+                      {product ? formatINR(preview.rows[i].total, { cents: true }) : '—'}
+                    </div>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+          {fieldError('items') && <p className="px-5 pb-4 text-xs text-red-600">{fieldError('items')}</p>}
+        </Card>
+      </div>
+
+      {/* Bottom row: low stock on the left, summary + Generate on the right (summary first on phones). */}
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="lg:col-start-2 lg:row-start-1">
+          <Card title="Bill summary">
+            <dl className="space-y-2 text-sm">
               <div className="flex justify-between text-slate-600">
                 <dt>Subtotal</dt>
-                <dd>{formatINR(preview.subtotal, { cents: true })}</dd>
+                <dd className="tabular-nums">{formatINR(preview.subtotal, { cents: true })}</dd>
               </div>
               <div className="flex justify-between text-slate-600">
-                <dt>Tax</dt>
-                <dd>{formatINR(preview.tax, { cents: true })}</dd>
-              </div>
-              <div className="flex justify-between text-base font-semibold">
-                <dt>Grand Total</dt>
-                <dd>{formatINR(preview.total, { cents: true })}</dd>
+                <dt>Tax (GST)</dt>
+                <dd className="tabular-nums">{formatINR(preview.tax, { cents: true })}</dd>
               </div>
             </dl>
-            <div className="mt-4 border-t border-dashed border-slate-300 pt-4">
-              <Field label="Amount given by customer (optional)" error={fieldError('amount_paid')}>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  className={inputClass}
-                  placeholder="₹0.00"
-                  value={amountGiven}
-                  onChange={(e) => setAmountGiven(e.target.value)}
-                />
+            <div className="mt-4 flex items-baseline justify-between rounded-xl bg-slate-900 px-4 py-3 text-white">
+              <span className="text-sm text-slate-300">Grand total</span>
+              <span className="text-2xl font-semibold tabular-nums">{formatINR(preview.total, { cents: true })}</span>
+            </div>
+
+            <div className="mt-5">
+              <Field label="Amount given by customer" hint="Optional: shows the change to return" error={fieldError('amount_paid')}>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className={`${inputClass} pl-7`}
+                    placeholder="0.00"
+                    value={amountGiven}
+                    onChange={(e) => setAmountGiven(e.target.value)}
+                  />
+                </div>
               </Field>
               {balanceCents !== null && <BalanceLine balanceCents={balanceCents} />}
             </div>
-          </Card>
 
-          <div className="flex flex-col justify-start">
-            <button
+            <Button
               type="submit"
-              disabled={submitting || products.length === 0}
-              className="flex items-center justify-center gap-2 rounded-md bg-green-700 px-8 py-3 font-semibold text-white shadow hover:bg-green-800 disabled:opacity-60"
+              variant="success"
+              size="lg"
+              icon={ReceiptText}
+              loading={submitting}
+              disabled={products.length === 0 || filledLines === 0}
+              className="mt-5 w-full"
             >
-              {submitting && <Spinner />}
-              Generate Bill
-            </button>
-            <p className="mt-2 max-w-48 text-xs text-slate-500">Shows the bill here and queues a confirmation email.</p>
-          </div>
+              Generate bill
+            </Button>
+            <p className="mt-2 text-center text-xs text-slate-500">
+              Confirmation goes by email{customer.phone.trim() ? ' and WhatsApp' : ''}.
+            </p>
+          </Card>
         </div>
-      </div>
 
-      <div>
-        <LowStockAlert refreshKey={lowStockKey} />
+        {can('products.view') && (
+          <div className="lg:col-start-1 lg:row-start-1">
+            <LowStockAlert refreshKey={lowStockKey} />
+          </div>
+        )}
       </div>
     </form>
   )
@@ -304,7 +339,7 @@ function CustomerStatus({ status }) {
   const states = {
     checking: { text: 'Looking up…', className: 'text-slate-500', spinner: true },
     found: { text: '✓ Returning customer: details filled in', className: 'text-green-700' },
-    new: { text: 'New customer: enter name and email', className: 'text-blue-700' },
+    new: { text: 'New customer: enter name and email', className: 'text-indigo-700' },
   }
   const state = states[status]
   if (!state) return <span className="text-xs text-slate-400">Enter mobile or email to find a customer</span>
@@ -318,17 +353,21 @@ function CustomerStatus({ status }) {
 function BalanceLine({ balanceCents }) {
   if (balanceCents < 0) {
     return (
-      <p className="mt-2 text-sm font-medium text-red-600">
-        Short by {formatINR(-balanceCents, { cents: true })}
-      </p>
+      <div className="mt-3 flex justify-between rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+        <span>Short by</span>
+        <span className="tabular-nums">{formatINR(-balanceCents, { cents: true })}</span>
+      </div>
     )
   }
   const { parts, paise } = changeBreakdown(balanceCents)
   const breakdown = [...parts.map((p) => `${p.count}×₹${p.value}`), ...(paise ? [`${paise} paise`] : [])].join(' + ')
   return (
-    <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2 text-sm">
-      <span className="font-semibold">Balance to return: {formatINR(balanceCents, { cents: true })}</span>
-      {breakdown && <span className="text-xs text-slate-500">{breakdown}</span>}
+    <div className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+      <div className="flex justify-between font-semibold">
+        <span>Balance to return</span>
+        <span className="tabular-nums">{formatINR(balanceCents, { cents: true })}</span>
+      </div>
+      {breakdown && <p className="mt-0.5 text-xs text-emerald-700">{breakdown}</p>}
     </div>
   )
 }

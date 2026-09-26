@@ -14,6 +14,8 @@ class LowStockTest extends TestCase
     {
         parent::setUp();
 
+        $this->signIn();
+
         Product::factory()->create(['name' => 'Eggs', 'stock' => 2]);
         Product::factory()->create(['name' => 'Bread', 'stock' => 4]);
         Product::factory()->create(['name' => 'Milk', 'stock' => 10]);
