@@ -3,7 +3,7 @@ import { toCents } from '../../lib/money'
 import './receipt.css'
 
 const STORE = {
-  name: import.meta.env.VITE_STORE_NAME ?? 'Store Billing',
+  name: import.meta.env.VITE_STORE_NAME ?? 'Mallow Mart',
   address: import.meta.env.VITE_STORE_ADDRESS ?? '',
   phone: import.meta.env.VITE_STORE_PHONE ?? '',
   gstin: import.meta.env.VITE_STORE_GSTIN ?? '',
@@ -127,7 +127,7 @@ export default function ThermalReceipt({ order, paper = '80', ref }) {
         <QRCodeSVG value={order.order_number} size={paper === '58' ? 64 : 80} level="M" />
       </div>
       <div className="rcpt-center rcpt-bold">Thank you! Visit again</div>
-      <div className="rcpt-center rcpt-small">Goods once sold can be exchanged within 7 days with this bill.</div>
+      <div className="rcpt-center rcpt-small">Goods once sold can't be exchange or Return.</div>
     </div>
   )
 }

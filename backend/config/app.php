@@ -13,7 +13,8 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'Laravel'),
+    // `?:` also covers an APP_NAME that is set but empty (easy to do on a hosting dashboard).
+    'name' => env('APP_NAME') ?: 'Mallow Mart',
 
     /*
     |--------------------------------------------------------------------------
