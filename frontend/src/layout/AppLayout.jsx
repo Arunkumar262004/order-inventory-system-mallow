@@ -60,7 +60,7 @@ export default function AppLayout() {
             </button>
           )}
           <img src={logo} alt="" className={`h-9 w-9 shrink-0 object-contain ${collapsed ? 'lg:hidden' : ''}`} />
-          <span className={`truncate text-base font-semibold text-slate-900 ${collapsed ? 'lg:hidden' : ''}`}>Store Billing</span>
+          <span className={`truncate text-base font-semibold text-slate-900 ${collapsed ? 'lg:hidden' : ''}`}>Mallow Mart</span>
           <button
             onClick={() => setCollapsed((c) => !c)}
             className="absolute -right-3.5 top-[18px] z-10 hidden h-7 w-7 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-md transition hover:border-indigo-300 hover:bg-indigo-600 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 lg:grid"
@@ -94,8 +94,7 @@ export default function AppLayout() {
                       to={to}
                       title={collapsed ? label : undefined}
                       className={({ isActive }) =>
-                        `group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                          isActive ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-100 hover:text-slate-900'
+                        `group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${isActive ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-100 hover:text-slate-900'
                         } ${collapsed ? 'lg:justify-center lg:px-0' : ''}`
                       }
                     >

@@ -53,7 +53,7 @@ export default function Login() {
         <div className="relative flex h-full items-center px-12 xl:px-[18%]">
           <div className="max-w-2xl">
             <span className="inline-block rounded-full border border-white/25 px-5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.15em] text-white/90">
-              Store Billing Portal
+              Mallow Mart Portal
             </span>
 
             <h2 className="mt-8 text-4xl font-bold leading-[1.1] tracking-tight text-white xl:text-5xl">
@@ -84,7 +84,7 @@ export default function Login() {
       <div className="flex items-center justify-center overflow-y-auto bg-white px-6 py-10 sm:px-12">
         <div className="w-full max-w-sm">
           <div className="mb-4 flex justify-center">
-            <img src={logo} alt="Store Billing" className="h-16 w-16 object-contain" />
+            <img src={logo} alt="Mallow Mart" className="h-16 w-16 object-contain" />
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Welcome back</h1>
