@@ -3,7 +3,8 @@ import { createOrder, getProducts } from '../api'
 import { parseApiError } from '../api/client'
 import Bill from '../components/Bill'
 import LowStockAlert from '../components/LowStockAlert'
-import { Plus, ReceiptText, Trash2 } from 'lucide-react'
+import { Plus, ReceiptText, Trash2, UserRoundPen } from 'lucide-react'
+import CustomerUpdateDialog from '../components/CustomerUpdateDialog'
 import { Alert, Badge, Button, Card, Field, Spinner, inputClass } from '../components/ui'
 import { useAuth } from '../auth/AuthContext'
 import useCustomerLookup from '../hooks/useCustomerLookup'
@@ -25,6 +26,7 @@ export default function NewOrder() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null) // { message, errors }
   const [order, setOrder] = useState(null)
+  const [confirmingCustomer, setConfirmingCustomer] = useState(false)
   const [lowStockKey, setLowStockKey] = useState(0)
 
   const loadProducts = useCallback(() => {
@@ -76,7 +78,7 @@ export default function NewOrder() {
     setOrder(null)
   }
 
-  async function handleSubmit(event) {
+  function handleSubmit(event) {
     event.preventDefault()
     setError(null)
 
@@ -89,6 +91,18 @@ export default function NewOrder() {
       return
     }
 
+    // The form differs from the saved customer: ask how to proceed, then bill.
+    if (customer.changes.length) {
+      setConfirmingCustomer(true)
+      return
+    }
+
+    submitOrder()
+  }
+
+  /** `override` lets the confirm dialog choose which customer to bill and whether to update them. */
+  async function submitOrder(override = {}) {
+    setConfirmingCustomer(false)
     setSubmitting(true)
     try {
       const created = await createOrder({
@@ -97,10 +111,18 @@ export default function NewOrder() {
         customer_phone: customer.phone.trim() || null,
         items: lines.map((l) => ({ product_id: Number(l.productId), quantity: Number(l.quantity) })),
         amount_paid: amountGiven === '' ? null : Number(amountGiven),
+        ...override,
       })
       setOrder(created)
     } catch (e) {
-      setError(parseApiError(e))
+      const err = parseApiError(e)
+      if (err.conflict?.type === 'phone_owner') {
+        // The mobile belongs to someone else: offer the same choices instead of an error.
+        customer.adoptPhoneOwner(err.conflict.customer)
+        setConfirmingCustomer(true)
+      } else {
+        setError(err)
+      }
     } finally {
       setSubmitting(false)
       // Stock may have changed either way (our order, or someone else's).
@@ -157,10 +179,20 @@ export default function NewOrder() {
                 placeholder="auto-filled if customer exists"
                 value={customer.name}
                 onChange={(e) => customer.change('name', e.target.value)}
-                readOnly={customer.status === 'found'}
               />
             </Field>
           </div>
+          {customer.status === 'modified' && customer.match && (
+            <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <UserRoundPen size={18} className="mt-0.5 shrink-0 text-amber-600" aria-hidden />
+              <p>
+                This {customer.match.by === 'phone' ? 'mobile number' : 'email'} belongs to{' '}
+                <b>{customer.match.customer.name}</b> ({customer.match.by === 'phone' ? customer.match.customer.email : customer.match.customer.phone ?? 'no mobile'}).
+                You changed {customer.changes.map((c) => c.label.toLowerCase()).join(' and ')}. You'll be asked whether to
+                update their record when you generate the bill; billing won't be blocked.
+              </p>
+            </div>
+          )}
         </Card>
 
         <Card
@@ -331,6 +363,16 @@ export default function NewOrder() {
           </div>
         )}
       </div>
+
+      {confirmingCustomer && customer.match && (
+        <CustomerUpdateDialog
+          match={customer.match}
+          changes={customer.changes}
+          form={{ email: customer.email.trim(), name: customer.name.trim() }}
+          onChoose={submitOrder}
+          onCancel={() => setConfirmingCustomer(false)}
+        />
+      )}
     </form>
   )
 }
@@ -339,6 +381,7 @@ function CustomerStatus({ status }) {
   const states = {
     checking: { text: 'Looking up…', className: 'text-slate-500', spinner: true },
     found: { text: '✓ Returning customer: details filled in', className: 'text-green-700' },
+    modified: { text: 'Returning customer: details changed', className: 'text-amber-700' },
     new: { text: 'New customer: enter name and email', className: 'text-indigo-700' },
   }
   const state = states[status]

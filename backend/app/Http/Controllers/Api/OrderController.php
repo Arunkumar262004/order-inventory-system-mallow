@@ -20,6 +20,8 @@ class OrderController extends Controller
             amountPaid: $request->validated('amount_paid'),
             phone: $request->validated('customer_phone'),
             cashier: $request->user(),
+            customerId: $request->validated('customer_id'),
+            updateCustomer: $request->boolean('update_customer'),
         );
 
         return OrderResource::make($order)->response()->setStatusCode(201);

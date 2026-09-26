@@ -108,8 +108,65 @@ class CustomerPhoneTest extends TestCase
             'customer_name' => 'Someone',
             'customer_phone' => '+91 98765 43210',
             'items' => [['product_id' => $product->id, 'quantity' => 1]],
-        ])->assertUnprocessable()->assertJsonValidationErrors('customer_phone');
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('customer_phone')
+            // The counter is told who owns the number so it can offer to update them.
+            ->assertJsonPath('conflict.type', 'phone_owner')
+            ->assertJsonPath('conflict.customer.email', 'owner@example.com');
 
+        $this->assertSame(5, $product->fresh()->stock);
+    }
+
+    public function test_the_phone_owner_can_be_updated_with_a_new_email_while_billing(): void
+    {
+        $arun = Customer::factory()->create(['name' => 'Arun', 'email' => 'arun@old.com', 'phone' => '9578777764']);
+        $product = Product::factory()->create(['stock' => 5]);
+
+        $this->postJson('/api/orders', [
+            'customer_id' => $arun->id,
+            'update_customer' => true,
+            'customer_email' => 'Arun@New.com',
+            'customer_name' => 'Arun Kumar',
+            'customer_phone' => '95787 77764',
+            'items' => [['product_id' => $product->id, 'quantity' => 1]],
+        ])->assertCreated()
+            ->assertJsonPath('data.customer.id', $arun->id)
+            ->assertJsonPath('data.customer.email', 'arun@new.com')
+            ->assertJsonPath('data.customer.name', 'Arun Kumar');
+
+        $this->assertDatabaseCount('customers', 1);
+        $this->assertSame('+919578777764', $arun->fresh()->phone);
+    }
+
+    public function test_billing_the_new_email_without_the_taken_mobile_creates_a_separate_customer(): void
+    {
+        $arun = Customer::factory()->create(['email' => 'arun@old.com', 'phone' => '9578777764']);
+        $product = Product::factory()->create(['stock' => 5]);
+
+        $this->postJson('/api/orders', [
+            'customer_email' => 'someone@new.com',
+            'customer_name' => 'Someone',
+            'customer_phone' => null,
+            'items' => [['product_id' => $product->id, 'quantity' => 1]],
+        ])->assertCreated()->assertJsonPath('data.customer.phone', null);
+
+        $this->assertSame('arun@old.com', $arun->fresh()->email, 'The owner is left untouched.');
+    }
+
+    public function test_updating_a_customer_cannot_steal_another_customers_email(): void
+    {
+        $arun = Customer::factory()->create(['email' => 'arun@old.com', 'phone' => '9578777764']);
+        Customer::factory()->create(['email' => 'taken@example.com']);
+        $product = Product::factory()->create(['stock' => 5]);
+
+        $this->postJson('/api/orders', [
+            'customer_id' => $arun->id,
+            'update_customer' => true,
+            'customer_email' => 'taken@example.com',
+            'items' => [['product_id' => $product->id, 'quantity' => 1]],
+        ])->assertUnprocessable()->assertJsonValidationErrors('customer_email');
+
+        $this->assertSame('arun@old.com', $arun->fresh()->email);
         $this->assertSame(5, $product->fresh()->stock);
     }
 

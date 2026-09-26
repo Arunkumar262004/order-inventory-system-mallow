@@ -61,7 +61,12 @@ client.interceptors.response.use(
 export function parseApiError(error) {
   const data = error?.response?.data
   if (data) {
-    return { message: data.message ?? 'Request failed.', errors: data.errors ?? {}, status: error.response.status }
+    return {
+      message: data.message ?? 'Request failed.',
+      errors: data.errors ?? {},
+      status: error.response.status,
+      conflict: data.conflict ?? null,
+    }
   }
   if (error?.request) {
     return { message: 'Cannot reach the API. Is `php artisan serve` running on port 8000?', errors: {}, status: 0 }

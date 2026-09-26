@@ -39,11 +39,15 @@ class OrderService
         string|float|null $amountPaid = null,
         ?string $phone = null,
         ?User $cashier = null,
+        ?int $customerId = null,
+        bool $updateCustomer = false,
     ): Order {
         $items = array_values($items);
 
-        $order = DB::transaction(function () use ($email, $name, $items, $amountPaid, $phone, $cashier) {
-            $customer = $this->resolveCustomer($email, $name, Phone::normalize($phone));
+        $order = DB::transaction(function () use ($email, $name, $items, $amountPaid, $phone, $cashier, $customerId, $updateCustomer) {
+            $customer = $customerId !== null
+                ? $this->billExistingCustomer($customerId, $updateCustomer, $email, $name, Phone::normalize($phone))
+                : $this->resolveCustomer($email, $name, Phone::normalize($phone));
 
             // Lock in primary-key order so two orders touching the same
             // products always acquire locks in the same sequence (no deadlocks).
@@ -111,6 +115,26 @@ class OrderService
         }
 
         return $order;
+    }
+
+    /**
+     * Bill a customer the counter explicitly chose (e.g. found by mobile).
+     * With $update, the submitted email / name / mobile are saved on their
+     * record first. That covers a returning customer whose email changed.
+     */
+    private function billExistingCustomer(int $customerId, bool $update, string $email, ?string $name, ?string $phone): Customer
+    {
+        $customer = Customer::query()->lockForUpdate()->findOrFail($customerId);
+
+        if ($update) {
+            $customer->update(array_filter([
+                'email' => mb_strtolower(trim($email)),
+                'name' => filled($name) ? trim($name) : null,
+                'phone' => $phone,
+            ], fn ($value) => $value !== null));
+        }
+
+        return $customer;
     }
 
     /**
