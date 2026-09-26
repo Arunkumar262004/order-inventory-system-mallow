@@ -18,7 +18,7 @@ class DemoActivitySeeder extends Seeder
 {
     public function run(OrderService $orders): void
     {
-        $cashier = User::where('email', 'cashier@store.test')->first();
+        $cashier = User::where('email', 'cashier@store.com')->first();
         $customers = Customer::all();
         // Keep the deliberately-low products low so the alerts have content.
         $products = Product::where('stock', '>=', 20)->get();
@@ -47,7 +47,7 @@ class DemoActivitySeeder extends Seeder
         // Don't send confirmations for invented historical orders.
         DB::table('jobs')->delete();
 
-        $admin = User::where('email', 'admin@store.test')->first();
+        $admin = User::where('email', 'admin@store.com')->first();
         $admin->reminders()->createMany([
             ['title' => 'Call Amul distributor about milk supply', 'due_at' => now()->subHours(2)],
             ['title' => 'Count cash drawer before closing', 'due_at' => now()->setTime(21, 0)],

@@ -10,7 +10,7 @@ use Symfony\Component\Process\Process;
 use Tests\TestCase;
 
 /**
- * Races real OS processes against the same MySQL row. Each process runs
+ * Races real OS processes against the same database row. Each process runs
  * `php artisan orders:place`, i.e. the same OrderService the API uses.
  *
  * To guarantee the requests genuinely overlap (rather than happening to run
@@ -22,23 +22,29 @@ class OrderConcurrencyTest extends TestCase
 {
     use DatabaseTruncation;
 
+    private bool $supported = false;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        if (DB::connection()->getDriverName() !== 'mysql') {
-            $this->markTestSkipped('Row-level locking needs MySQL; SQLite ignores SELECT ... FOR UPDATE.');
+        $this->supported = DB::connection()->getDriverName() === 'pgsql';
+
+        if (! $this->supported) {
+            $this->markTestSkipped('Row-level locking needs PostgreSQL; SQLite ignores SELECT ... FOR UPDATE.');
         }
     }
 
     protected function tearDown(): void
     {
         // Committed data would otherwise leak into RefreshDatabase tests.
-        Schema::withoutForeignKeyConstraints(function () {
-            foreach (['order_items', 'orders', 'customers', 'products', 'jobs'] as $table) {
-                DB::table($table)->truncate();
-            }
-        });
+        if ($this->supported) {
+            Schema::withoutForeignKeyConstraints(function () {
+                foreach (['order_items', 'orders', 'customers', 'products', 'jobs'] as $table) {
+                    DB::table($table)->truncate();
+                }
+            });
+        }
 
         parent::tearDown();
     }
@@ -72,10 +78,18 @@ class OrderConcurrencyTest extends TestCase
      */
     private function race(Product $product, int $buyers): array
     {
+        $connection = DB::getDefaultConnection();
+        $db = config("database.connections.{$connection}");
+
+        // Child processes must hit the same test database as this process.
         $env = [
             'APP_ENV' => 'testing',
-            'DB_CONNECTION' => 'mysql',
-            'DB_DATABASE' => config('database.connections.mysql.database'),
+            'DB_CONNECTION' => $connection,
+            'DB_HOST' => $db['host'],
+            'DB_PORT' => (string) $db['port'],
+            'DB_DATABASE' => $db['database'],
+            'DB_USERNAME' => $db['username'],
+            'DB_PASSWORD' => $db['password'],
             'QUEUE_CONNECTION' => 'sync',
             'MAIL_MAILER' => 'array',
             'WASENDER_API_TOKEN' => '',

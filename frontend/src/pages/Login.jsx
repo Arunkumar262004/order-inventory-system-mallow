@@ -6,9 +6,9 @@ import { useAuth } from '../auth/AuthContext'
 import { Alert, Spinner } from '../components/ui'
 
 const DEMO_ACCOUNTS = [
-  { label: 'Admin', email: 'admin@store.test' },
-  { label: 'Manager', email: 'manager@store.test' },
-  { label: 'Cashier', email: 'cashier@store.test' },
+  { label: 'Admin', email: 'admin@store.com' },
+  { label: 'Manager', email: 'manager@store.com' },
+  { label: 'Cashier', email: 'cashier@store.com' },
 ]
 
 const STATS = [
@@ -106,7 +106,7 @@ export default function Login() {
                   className={fieldClass}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@store.test"
+                  placeholder="you@store.com"
                   required
                   autoFocus
                 />

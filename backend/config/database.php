@@ -97,6 +97,13 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            'options' => [
+                // One network round trip per query instead of prepare + execute;
+                // makes a remote database (Neon) roughly 3x faster.
+                PDO::ATTR_EMULATE_PREPARES => (bool) env('DB_EMULATE_PREPARES', true),
+                // Reuse the SSL connection across requests instead of paying ~1s to reconnect each time.
+                PDO::ATTR_PERSISTENT => (bool) env('DB_PERSISTENT', true),
+            ],
         ],
 
         'sqlsrv' => [

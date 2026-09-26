@@ -2,7 +2,7 @@
 
 A retail-counter billing app. The counter records customer orders against a product catalog, and stock stays in sync, including when two orders arrive at the same moment.
 
-- **Backend:** Laravel 13 (PHP 8.3) JSON API, MySQL 8, database queue
+- **Backend:** Laravel 13 (PHP 8.3) JSON API, PostgreSQL (hosted on [Neon](https://neon.tech)), database queue
 - **Frontend:** React 19 + Vite 8 + Tailwind CSS 4, a separate app that talks to the API over CORS
 
 ```
@@ -18,9 +18,9 @@ order-inventory-system-mallow/
 
 | Tool | Version used | Check with |
 |---|---|---|
-| PHP | 8.3+ with `pdo_mysql`, `mbstring`, `openssl` | `php -v`, `php -m` |
+| PHP | 8.3+ with `pdo_pgsql`, `pdo_sqlite`, `mbstring`, `openssl` | `php -v`, `php -m` |
 | Composer | 2.x | `composer -V` |
-| MySQL | 8.x | `mysql --version` |
+| PostgreSQL | a Neon database (free tier); nothing to install locally | [console.neon.tech](https://console.neon.tech) |
 | Node.js / npm | Node 20.19+ (built on 24) / npm 10+ | `node -v`, `npm -v` |
 
 ## 2. Setup
@@ -30,16 +30,11 @@ order-inventory-system-mallow/
 ```bash
 cd backend
 composer install
-cp .env.example .env          # then set DB_USERNAME / DB_PASSWORD
+cp .env.example .env          # then fill in the DB_* values from your Neon connection string
 php artisan key:generate
 ```
 
-Create the two databases, one for the app and one for tests:
-
-```sql
-CREATE DATABASE `store-order-inventory-system`         CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE DATABASE `store-order-inventory-system_testing` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
+The same Neon database is used locally and in production. Use Neon's **direct** host (without `-pooler`); migrations fail through the pooler. In `php.ini`, enable `extension=pdo_pgsql`.
 
 ```bash
 php artisan migrate --seed    # 10 products (some already low on stock) + 10 customers
@@ -81,11 +76,11 @@ Open **http://localhost:5173**. With the default `MAIL_MAILER=log`, the confirma
 
 | Account | Role | Sees |
 |---|---|---|
-| `admin@store.test` | Admin | Everything, plus **Settings** (Users, Roles & Permissions, Password Reset) |
-| `manager@store.test` | Store Manager | Dashboard, billing, orders, inventory (add/edit products, restock) |
-| `cashier@store.test` | Cashier | Dashboard, billing and order history only |
+| `admin@store.com` | Admin | Everything, plus **Settings** (Users, Roles & Permissions, Password Reset) |
+| `manager@store.com` | Store Manager | Dashboard, billing, orders, inventory (add/edit products, restock) |
+| `cashier@store.com` | Cashier | Dashboard, billing and order history only |
 
-Seeded customers you can try: `arun@example.com` (mobile `5550001111`) and `priya@example.com` (mobile `5550002222`). Type either the mobile number or the email, and the other two fields fill in. The seeded numbers are deliberately not real, so test WhatsApp delivery with your own number.
+Seeded customers you can try: `arun@example.com` (mobile `9578777764`) and `priya@example.com` (mobile `9092276443`). Type either the mobile number or the email, and the other two fields fill in. Bills for these customers send real WhatsApp messages, so change the numbers in `CustomerSeeder` to your own before testing.
 
 ### Optional: real email and WhatsApp
 
@@ -112,9 +107,9 @@ cd backend
 php artisan test
 ```
 
-There are 71 tests (305 assertions). They cover login, logout, rate limiting and password changes; role-based access (a cashier gets 403 on inventory and settings, and even a role holding every permission can't reach settings); role and user management, admin password resets and self-lock-out protection; product create/edit, restocks and corrections (stock can never go negative), with every change in the stock log; the dashboard, notifications and private reminders; order creation, totals and rounding, insufficient stock, all-or-nothing rollback, validation, customer reuse, mobile-number lookup and normalisation, payment and change, order history, low-stock thresholds, both queued jobs (the WhatsApp API is faked with `Http::fake`), CORS, and a real multi-process concurrency test. `phpunit.xml` blanks the WhatsApp token and Resend key, so tests never send real messages.
+There are 74 tests. They cover login, logout, rate limiting and password changes; role-based access (a cashier gets 403 on inventory and settings, and even a role holding every permission can't reach settings); role and user management, admin password resets and self-lock-out protection; product create/edit, restocks and corrections (stock can never go negative), with every change in the stock log; the dashboard, notifications and private reminders; order creation, totals and rounding, insufficient stock, all-or-nothing rollback, validation, customer reuse, mobile-number lookup and normalisation, payment and change, order history, low-stock thresholds, both queued jobs (the WhatsApp API is faked with `Http::fake`), CORS, and a real multi-process concurrency test. `phpunit.xml` blanks the WhatsApp token and Resend key, so tests never send real messages.
 
-> The tests use the MySQL database `store-order-inventory-system_testing` (set in `phpunit.xml`). The concurrency test needs MySQL, because SQLite silently ignores `SELECT … FOR UPDATE`. On any other driver the test skips itself.
+> The tests run on an in-memory SQLite database (set in `phpunit.xml`), so they need nothing installed and never touch the Neon data. The concurrency test needs real row locks, which SQLite ignores, so it skips itself there. To run it, point `phpunit.xml` at a separate PostgreSQL test database (never the live one: tests wipe their tables).
 
 ---
 
@@ -154,7 +149,7 @@ Accept: application/json
 
 {
   "customer_email": "arun@example.com",
-  "customer_name": "Arun Pandian",      // required only for a new customer
+  "customer_name": "Arun Kumar",      // required only for a new customer
   "customer_phone": "98765 43210",       // optional; enables the WhatsApp bill
   "items": [
     { "product_id": 1, "quantity": 2 },
@@ -171,7 +166,7 @@ Accept: application/json
   "data": {
     "id": 1,
     "order_number": "ORD-20260925-IXBC2Z",
-    "customer": { "id": 1, "name": "Arun Pandian", "email": "arun@example.com" },
+    "customer": { "id": 1, "name": "Arun Kumar", "email": "arun@example.com" },
     "items": [
       { "product_id": 1, "product_name": "Colgate Toothpaste 100g", "quantity": 2,
         "unit_price": "50.00", "tax_percent": "18.00",
@@ -261,7 +256,7 @@ $products = Product::whereKey($ids)->orderBy('id')->lockForUpdate()->get();  // 
 ```
 
 - `lockForUpdate()` takes an exclusive row lock. A second order for the same product blocks at this line until the first commits. It then reads the already-reduced stock and fails with a clean 422.
-- Locks are taken in primary-key order, so two orders for overlapping products can't deadlock each other. `DB::transaction(..., attempts: 3)` retries if MySQL reports a deadlock anyway.
+- Locks are taken in primary-key order, so two orders for overlapping products can't deadlock each other. `DB::transaction(..., attempts: 3)` retries if the database reports a deadlock anyway.
 - Customers are created with `createOrFirst()`, so two first-time orders for the same email can't create duplicate customers.
 
 **How it's proven:** `OrderConcurrencyTest` starts real, separate PHP processes (`php artisan orders:place …`). Each one opens its own database connection and goes through the same `OrderService` the API uses. To force the requests to overlap, rather than run one after another by chance, the test first holds the product's row lock itself. It starts all the processes, waits until they are queued behind that lock, then releases it so they compete at the same instant.
