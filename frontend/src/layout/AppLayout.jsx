@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Menu, PanelLeftClose, PanelLeftOpen, Store, X } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Menu, X } from 'lucide-react'
+import logo from '../assets/billing.png'
 import { useAuth } from '../auth/AuthContext'
 import NotificationBell from './NotificationBell'
 import UserMenu from './UserMenu'
@@ -43,18 +44,46 @@ export default function AppLayout() {
       )}
 
       <aside
-        className={`no-print fixed inset-y-0 left-0 z-40 flex flex-col bg-slate-900 text-slate-300 transition-all duration-200
-          ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} w-64 lg:translate-x-0
+        className={`no-print fixed inset-y-0 left-0 z-40 flex flex-col border-r border-slate-200 bg-white text-slate-600 transition-all duration-200
+          ${mobileOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full'} w-64 lg:translate-x-0
           ${collapsed ? 'lg:w-[72px]' : 'lg:w-64'}`}
       >
-        <div className="flex h-16 items-center gap-3 border-b border-white/10 px-4">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-indigo-500 text-white">
-            <Store size={18} aria-hidden />
-          </div>
-          <span className={`truncate text-base font-semibold text-white ${collapsed ? 'lg:hidden' : ''}`}>Store Billing</span>
+        <div className={`flex h-16 items-center gap-3 border-b border-slate-200 px-4 ${collapsed ? 'lg:justify-center lg:px-0' : ''}`}>
+          {collapsed && (
+            <>
+              <button
+                onClick={() => setCollapsed(false)}
+                className="hidden h-11 w-11 place-items-center rounded-xl transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 lg:grid"
+                aria-label="Expand menu"
+                title="Expand menu"
+              >
+                <img src={logo} alt="" className="h-8 w-8 object-contain" />
+              </button>
+              <button
+                onClick={() => setCollapsed(false)}
+                className="absolute -right-3.5 top-[18px] z-10 hidden h-7 w-7 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-md transition hover:border-indigo-300 hover:bg-indigo-600 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 lg:grid"
+                aria-label="Expand menu"
+                title="Expand menu"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </>
+          )}
+          <img src={logo} alt="" className={`h-9 w-9 shrink-0 object-contain ${collapsed ? 'lg:hidden' : ''}`} />
+          <span className={`truncate text-base font-semibold text-slate-900 ${collapsed ? 'lg:hidden' : ''}`}>Store Billing</span>
+          {!collapsed && (
+            <button
+              onClick={() => setCollapsed(true)}
+              className="ml-auto hidden rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 lg:block"
+              aria-label="Collapse menu"
+              title="Collapse menu"
+            >
+              <ArrowLeft size={20} />
+            </button>
+          )}
           <button
             onClick={() => setMobileOpenAt(null)}
-            className="ml-auto rounded-md p-1 text-slate-400 hover:bg-white/10 hover:text-white lg:hidden"
+            className="ml-auto rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 lg:hidden"
             aria-label="Close menu"
           >
             <X size={18} />
@@ -65,11 +94,11 @@ export default function AppLayout() {
           {sections.map((section) => (
             <div key={section.title}>
               <p
-                className={`mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500 ${collapsed ? 'lg:hidden' : ''}`}
+                className={`mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 ${collapsed ? 'lg:hidden' : ''}`}
               >
                 {section.title}
               </p>
-              {collapsed && <div className="mx-3 mb-2 hidden border-t border-white/10 lg:block" />}
+              {collapsed && <div className="mx-3 mb-2 hidden border-t border-slate-200 lg:block" />}
               <ul className="space-y-1">
                 {section.items.map(({ to, label, icon: Icon }) => (
                   <li key={to}>
@@ -78,13 +107,13 @@ export default function AppLayout() {
                       title={collapsed ? label : undefined}
                       className={({ isActive }) =>
                         `group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                          isActive ? 'bg-indigo-500/15 text-white' : 'hover:bg-white/5 hover:text-white'
+                          isActive ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-100 hover:text-slate-900'
                         } ${collapsed ? 'lg:justify-center lg:px-0' : ''}`
                       }
                     >
                       {({ isActive }) => (
                         <>
-                          <Icon size={18} className={isActive ? 'text-indigo-300' : 'text-slate-400 group-hover:text-slate-200'} aria-hidden />
+                          <Icon size={18} className={isActive ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600'} aria-hidden />
                           <span className={collapsed ? 'lg:hidden' : ''}>{label}</span>
                         </>
                       )}
@@ -95,15 +124,6 @@ export default function AppLayout() {
             </div>
           ))}
         </nav>
-
-        <button
-          onClick={() => setCollapsed((c) => !c)}
-          className="hidden items-center gap-3 border-t border-white/10 px-6 py-4 text-sm text-slate-400 hover:text-white lg:flex"
-          aria-label={collapsed ? 'Expand menu' : 'Collapse menu'}
-        >
-          {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-          <span className={collapsed ? 'hidden' : ''}>Collapse menu</span>
-        </button>
       </aside>
 
       <div className={`transition-all duration-200 ${collapsed ? 'lg:pl-[72px]' : 'lg:pl-64'}`}>

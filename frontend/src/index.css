@@ -1,5 +1,31 @@
 @import "tailwindcss";
 
+@theme {
+  --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Tailwind v4 no longer gives buttons a pointer cursor; restore it for everything clickable. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a[href],
+  select:not(:disabled),
+  summary,
+  label[for],
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="file"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled,
+  input:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}
+
 @media print {
   .no-print {
     display: none !important;

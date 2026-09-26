@@ -67,7 +67,7 @@ export default function NewOrder() {
   }
 
   function removeLine(key) {
-    setLines((prev) => (prev.length === 1 ? [newLine()] : prev.filter((l) => l.key !== key)))
+    setLines((prev) => prev.filter((l) => l.key !== key))
   }
 
   function resetForm() {
@@ -225,6 +225,9 @@ export default function NewOrder() {
             <span />
           </div>
           <ul className="divide-y divide-slate-100 border-t border-slate-100 @2xl:border-t-0">
+            {lines.length === 0 && (
+              <li className="px-5 py-8 text-center text-sm text-slate-500">No products added. Click “Add product” to start the bill.</li>
+            )}
             {lines.map((line, i) => {
               const product = productById.get(String(line.productId))
               const overStock = product && Number(line.quantity) > product.stock
@@ -285,14 +288,14 @@ export default function NewOrder() {
                     </label>
                     <div className="text-right text-sm tabular-nums text-slate-600 @2xl:pt-2">
                       <span className="mb-1 block text-[11px] font-medium uppercase text-slate-500 @2xl:hidden">Price</span>
-                      {product ? formatINR(product.price) : '—'}
+                      {formatINR(product?.price ?? 0)}
                       {product && Number(product.tax_percent) > 0 && (
                         <span className="block text-xs text-slate-400">+{Number(product.tax_percent)}% GST</span>
                       )}
                     </div>
                     <div className="text-right text-sm font-semibold tabular-nums text-slate-900 @2xl:pt-2">
                       <span className="mb-1 block text-[11px] font-medium uppercase text-slate-500 @2xl:hidden">Total</span>
-                      {product ? formatINR(preview.rows[i].total, { cents: true }) : '—'}
+                      {formatINR(product ? preview.rows[i].total : 0, { cents: true })}
                     </div>
                   </div>
                 </li>
